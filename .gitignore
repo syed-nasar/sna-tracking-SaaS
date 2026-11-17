@@ -1,0 +1,36 @@
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+
+# Runtime data
+uploads/
+storage/
+
+# Database backups
+*.backup
+*.dump
+*.bak
+
+# Private keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Operating system
+.DS_Store
+Thumbs.db
+desktop.ini
