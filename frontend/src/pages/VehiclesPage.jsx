@@ -4,6 +4,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { Link } from "react-router-dom";
 
 import {
   Check,
@@ -610,7 +611,10 @@ export default function VehiclesPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Link to="/devices" className="rounded-xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-slate-300">
+              Device connectivity
+            </Link>
             <button
               type="button"
               onClick={loadVehicles}

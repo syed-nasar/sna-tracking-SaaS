@@ -15,6 +15,7 @@ const vehicleImageRoutes = require("./routes/vehicle-image.routes");
 
 const userRoutes = require("./routes/user.routes");
 const fleetRoutes = require("./routes/fleet.routes");
+const connectivityRoutes = require("./routes/connectivity.routes");
 
 const invitationAcceptanceRouter = require("./routes/invitation-acceptance.routes");
 
@@ -50,6 +51,7 @@ app.use("/api/platform/auth", platformAuthRoutes);
 app.use("/api/platform/tenants", platformTenantRoutes);
 
 app.use("/api/platform/devices", platformDeviceRoutes);
+app.use("/api/platform/connectivity", connectivityRoutes.platform);
 
 // Vehicle image routes are mounted before
 // the existing vehicle routes.
@@ -59,6 +61,7 @@ app.use("/api/vehicles", vehicleRoutes);
 
 app.use("/api/users", userRoutes);
 app.use("/api/fleet", fleetRoutes);
+app.use("/api/connectivity", connectivityRoutes.tenant);
 
 // Unknown API endpoint.
 app.use((req, res) => {
@@ -69,11 +72,6 @@ app.use((req, res) => {
 
 // Centralized error handler.
 app.use((error, req, res, next) => {
-  console.error(
-    "Unhandled API error:",
-    error.message
-  );
-
   if (error.type === "entity.too.large") {
     return res.status(413).json({
       message: "Request body too large",
@@ -89,6 +87,7 @@ app.use((error, req, res, next) => {
     });
   }
 
+  console.error("Unhandled API error:", error.code || error.name);
   return res.status(500).json({
     message: "Internal server error",
   });

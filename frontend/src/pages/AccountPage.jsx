@@ -72,8 +72,7 @@ export default function AccountPage() {
     try {
       await tenantApi.patch("/users/me/password", { currentPassword, newPassword });
       form.reset();
-      logout();
-      navigate("/login", { replace: true });
+      if (logout()) navigate("/login", { replace: true });
     } catch (error) {
       setPasswordError(error.response?.data?.message || "Could not change your password.");
     } finally {

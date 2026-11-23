@@ -23,6 +23,7 @@ import TenantDetails from "./pages/platform/TenantDetails";
 import CompanyOnboarding from "./pages/platform/CompanyOnboarding";
 import InvitationAcceptance from "./pages/InvitationAcceptance";
 import DeviceInventoryPage from "./pages/platform/DeviceInventoryPage";
+import SimConnectivityPage from "./pages/platform/SimConnectivityPage";
 
 function HomeRedirect() {
   const { session } = useAuth();
@@ -46,12 +47,12 @@ export default function App() {
 
         <Route
           path="/login"
-          element={<LoginPage type="tenant" />}
+          element={<LoginPage key="tenant-login" type="tenant" />}
         />
 
         <Route
           path="/platform/login"
-          element={<LoginPage type="platform" />}
+          element={<LoginPage key="platform-login" type="platform" />}
         />
 
         <Route
@@ -84,6 +85,7 @@ export default function App() {
         {/* Platform Admin routes */}
         <Route element={<ProtectedRoute type="platform" />}>
           <Route path="/platform/devices" element={<DeviceInventoryPage />} />
+          <Route path="/platform/connectivity" element={<SimConnectivityPage />} />
           <Route
             path="/platform/dashboard"
             element={<PlatformDashboard />}

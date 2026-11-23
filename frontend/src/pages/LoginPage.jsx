@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import {
   Truck,
   ShieldCheck,
@@ -16,7 +16,7 @@ import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage({ type = "tenant" }) {
   const isPlatform = type === "platform";
-  const navigate = useNavigate();
+  const { state } = useLocation();
 
   const { session, signInTenant, signInPlatform } = useAuth();
 
@@ -31,21 +31,19 @@ export default function LoginPage({ type = "tenant" }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const destination = isPlatform
+  const defaultDestination = isPlatform
     ? "/platform/dashboard"
     : "/dashboard";
+  const requested = state?.returnTo;
+  const pathname = requested?.pathname;
+  const validReturn = state?.authType === type && typeof pathname === "string" &&
+    pathname.startsWith("/") && !pathname.startsWith("//") && !pathname.includes("\\") &&
+    pathname !== "/login" && pathname !== "/platform/login" &&
+    pathname.startsWith("/platform/") === isPlatform;
+  const destination = validReturn ? requested : defaultDestination;
 
-  if (session) {
-    return (
-      <Navigate
-        to={
-          session.type === "platform"
-            ? "/platform/dashboard"
-            : "/dashboard"
-        }
-        replace
-      />
-    );
+  if (session?.type === type) {
+    return <Navigate to={destination} replace />;
   }
 
   const updateField = (event) => {
@@ -95,7 +93,6 @@ export default function LoginPage({ type = "tenant" }) {
         });
       }
 
-      navigate(destination, { replace: true });
     } catch (err) {
       setError(
         err.response?.data?.message ||

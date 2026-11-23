@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 
 import { platformApi } from "../../services/api";
+import ConnectivitySummary from "./connectivity/ConnectivitySummary";
+import { useConnectivityGet } from "./connectivity/connectivity-data";
 import { useAuth } from "../../context/AuthContext";
 
 function StatusBadge({ status }) {
@@ -92,6 +94,7 @@ function StatCard({ title, value, icon: Icon, description }) {
 }
 
 export default function PlatformDashboard() {
+  const connectivity = useConnectivityGet("/summary");
   const navigate = useNavigate();
   const { session, logout } = useAuth();
 
@@ -394,6 +397,9 @@ export default function PlatformDashboard() {
             </div>
           </div>
 
+          <div className="mb-6">
+            <ConnectivitySummary {...connectivity} compact />
+          </div>
           <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               title="Total Customers"

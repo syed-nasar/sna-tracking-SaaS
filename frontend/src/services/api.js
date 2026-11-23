@@ -13,21 +13,10 @@ const api = axios.create({
   },
 });
 
-// Separate in-memory tokens for the two authentication systems.
-let tenantAccessToken = null;
-let platformAccessToken = null;
+let activeAuth = null;
 
-export function setTenantAccessToken(token) {
-  tenantAccessToken = token || null;
-}
-
-export function setPlatformAccessToken(token) {
-  platformAccessToken = token || null;
-}
-
-export function clearAccessTokens() {
-  tenantAccessToken = null;
-  platformAccessToken = null;
+export function setActiveAuth(auth) {
+  activeAuth = auth;
 }
 
 // Create separate clients so a platform token is never
@@ -40,27 +29,15 @@ export const platformApi = axios.create({
   ...api.defaults,
 });
 
-tenantApi.interceptors.request.use((config) => {
-  if (tenantAccessToken) {
-    config.headers.set(
-      "Authorization",
-      `Bearer ${tenantAccessToken}`
-    );
-  }
-
-  return config;
-});
-
-platformApi.interceptors.request.use((config) => {
-  if (platformAccessToken) {
-    config.headers.set(
-      "Authorization",
-      `Bearer ${platformAccessToken}`
-    );
-  }
-
-  return config;
-});
+for (const [client, type] of [[tenantApi, "tenant"], [platformApi, "platform"]]) {
+  client.interceptors.request.use((config) => {
+    if (activeAuth?.type === type && !config.headers.has("Authorization")) {
+      config.headers.set("Authorization", `Bearer ${activeAuth.token}`);
+      config.authSessionId = activeAuth.id;
+    }
+    return config;
+  }, undefined, { synchronous: true });
+}
 
 // Public authentication endpoints.
 export async function loginTenant(credentials) {

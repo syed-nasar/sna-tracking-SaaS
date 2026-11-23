@@ -13,39 +13,74 @@ import {
   loginPlatform,
   tenantApi,
   platformApi,
-  setTenantAccessToken,
-  setPlatformAccessToken,
-  clearAccessTokens,
+  setActiveAuth,
 } from "../services/api";
+import { getTokenExpiry, readStoredSession, storeSession } from "../services/auth-session";
 
 const AuthContext = createContext(null);
 
-function getTokenExpiry(token) {
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return typeof payload.exp === "number"
-      ? payload.exp * 1000
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
-  const tenantSessionId = useRef(null);
+  const [restoring, setRestoring] = useState(readStoredSession);
+  const [restoreError, setRestoreError] = useState(false);
+  const activeSession = useRef(null);
+  const loginAttempt = useRef(null);
   const profileRequest = useRef(null);
 
   const logout = useCallback(() => {
-    tenantSessionId.current = null;
+    activeSession.current = null;
+    loginAttempt.current = null;
     profileRequest.current?.abort();
-    clearAccessTokens();
+    setActiveAuth(null);
+    storeSession(null);
+    setRestoring(null);
+    setRestoreError(false);
     setSession(null);
   }, []);
 
+  const startSession = useCallback((type, token, profile) => {
+    const expiresAt = getTokenExpiry(token);
+    if (!expiresAt || expiresAt <= Date.now()) throw new Error("Invalid or expired access token");
+
+    profileRequest.current?.abort();
+    const next = { id: Symbol(), type, profile, expiresAt };
+    activeSession.current = next;
+    setActiveAuth({ id: next.id, type, token });
+    storeSession({ type, token });
+    setSession(next);
+    setRestoring(null);
+    setRestoreError(false);
+  }, []);
+
+  useEffect(() => {
+    if (!restoring) {
+      if (!activeSession.current) storeSession(null);
+      return;
+    }
+    if (restoreError) return;
+
+    const controller = new AbortController();
+    const { type, token } = restoring;
+    const client = type === "platform" ? platformApi : tenantApi;
+    const path = type === "platform" ? "/platform/auth/me" : "/users/me";
+    client.get(path, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    }).then(({ data }) => {
+      if (!controller.signal.aborted) startSession(type, token, data);
+    }).catch((error) => {
+      if (controller.signal.aborted) return;
+      const status = error.response?.status;
+      if (status === 401 || status === 403 || getTokenExpiry(token) <= Date.now()) logout();
+      else setRestoreError(true);
+    });
+
+    return () => controller.abort();
+  }, [restoring, restoreError, startSession, logout]);
+
   const refreshTenantProfile = useCallback(async () => {
-    const sessionId = tenantSessionId.current;
-    if (!sessionId) return;
+    const currentSession = activeSession.current;
+    if (currentSession?.type !== "tenant") return;
 
     profileRequest.current?.abort();
     const controller = new AbortController();
@@ -57,12 +92,12 @@ export function AuthProvider({ children }) {
         handleSessionError: true,
       });
       if (controller.signal.aborted) return;
-      setSession((current) => current?.id === sessionId
+      setSession((current) => current?.id === currentSession.id
         ? { ...current, profile: { ...current.profile, ...data } }
         : current);
     } catch (error) {
       const status = error.response?.status;
-      if (!controller.signal.aborted && tenantSessionId.current === sessionId &&
+      if (!controller.signal.aborted && activeSession.current === currentSession &&
           (status === 401 || status === 403)) {
         logout();
       }
@@ -71,59 +106,19 @@ export function AuthProvider({ children }) {
     }
   }, [logout]);
 
-  const signInTenant = async (credentials) => {
-    const data = await loginTenant(credentials);
-
-    if (!data.accessToken || !data.user) {
+  const signIn = async (type, credentials) => {
+    const attempt = Symbol();
+    loginAttempt.current = attempt;
+    const isPlatform = type === "platform";
+    const data = await (isPlatform ? loginPlatform(credentials) : loginTenant(credentials));
+    const profile = isPlatform ? data.admin : data.user;
+    if (!data.accessToken || !profile) {
       throw new Error("Invalid authentication response");
     }
+    if (loginAttempt.current !== attempt) throw new Error("This sign-in attempt is no longer active.");
 
-    const expiresAt = getTokenExpiry(data.accessToken);
-
-    if (!expiresAt || expiresAt <= Date.now()) {
-      throw new Error("Invalid or expired access token");
-    }
-
-    clearAccessTokens();
-    setTenantAccessToken(data.accessToken);
-    const id = Symbol();
-    tenantSessionId.current = id;
-
-    setSession({
-      id,
-      type: "tenant",
-      profile: data.user,
-      expiresAt,
-    });
-
-    return data.user;
-  };
-
-  const signInPlatform = async (credentials) => {
-    const data = await loginPlatform(credentials);
-
-    if (!data.accessToken || !data.admin) {
-      throw new Error("Invalid authentication response");
-    }
-
-    const expiresAt = getTokenExpiry(data.accessToken);
-
-    if (!expiresAt || expiresAt <= Date.now()) {
-      throw new Error("Invalid or expired access token");
-    }
-
-    clearAccessTokens();
-    setPlatformAccessToken(data.accessToken);
-    tenantSessionId.current = null;
-    profileRequest.current?.abort();
-
-    setSession({
-      type: "platform",
-      profile: data.admin,
-      expiresAt,
-    });
-
-    return data.admin;
+    startSession(type, data.accessToken, profile);
+    return profile;
   };
 
   const sessionType = session?.type;
@@ -147,21 +142,22 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!session) return;
 
-    const remaining = session.expiresAt - Date.now();
-
-    if (remaining <= 0) {
-      logout();
-      return;
-    }
-
-    const timer = window.setTimeout(logout, remaining);
-
+    let timer;
+    const schedule = () => {
+      timer = window.setTimeout(() => {
+        if (session.id !== activeSession.current?.id) return;
+        if (session.expiresAt <= Date.now()) logout();
+        else schedule();
+      }, Math.min(2147483647, Math.max(0, session.expiresAt - Date.now())));
+    };
+    schedule();
     return () => window.clearTimeout(timer);
   }, [session, logout]);
 
   useEffect(() => {
     const onRejected = (error) => {
-      if (error.response?.status === 401 && !error.config?.handleSessionError) {
+      if (error.response?.status === 401 && !error.config?.handleSessionError &&
+          activeSession.current && error.config?.authSessionId === activeSession.current.id) {
         logout();
       }
 
@@ -191,14 +187,34 @@ export function AuthProvider({ children }) {
     };
   }, [logout]);
 
+  if (restoring) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#090d16] p-5 text-white">
+        {restoreError ? (
+          <div className="space-y-4 rounded-xl border border-white/10 bg-[#111827] p-5">
+            <p role="alert">Could not verify your saved session. Check the connection and try again.</p>
+            <div className="flex flex-wrap gap-3">
+              <button className="rounded-lg bg-blue-600 px-4 py-2" onClick={() => setRestoreError(false)}>Retry</button>
+              <button className="rounded-lg border border-white/20 px-4 py-2" onClick={logout}>Sign in again</button>
+            </div>
+          </div>
+        ) : <p role="status">Restoring session…</p>}
+      </main>
+    );
+  }
+
   return (
     <AuthContext.Provider
       value={{
         session,
-        signInTenant,
-        signInPlatform,
+        signInTenant: (credentials) => signIn("tenant", credentials),
+        signInPlatform: (credentials) => signIn("platform", credentials),
         refreshTenantProfile,
-        logout,
+        logout: () => {
+          if (!session || session.id !== activeSession.current?.id) return false;
+          logout();
+          return true;
+        },
       }}
     >
       {children}
