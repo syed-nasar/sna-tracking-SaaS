@@ -5,6 +5,7 @@ const ROLE_PERMISSIONS = Object.freeze({
     "vehicles:write",
     "users:read",
     "users:write",
+    "billing:read",
   ],
   manager: [
     "vehicles:read",

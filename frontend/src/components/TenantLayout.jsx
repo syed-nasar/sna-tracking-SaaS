@@ -10,6 +10,7 @@ import {
   LogOut,
   MapPinned,
   Menu,
+  Receipt,
   ShieldCheck,
   Truck,
   UserRound,
@@ -55,6 +56,13 @@ const navigationItems = [
     businessLabel: "Company Account",
     path: "/account",
     icon: UserRound,
+  },
+  {
+    personalLabel: "My Billing",
+    businessLabel: "Company Billing",
+    path: "/billing",
+    icon: Receipt,
+    tenantAdmin: true,
   },
   {
     businessLabel: "User Management",
@@ -155,6 +163,7 @@ export default function TenantLayout({
 
           <div className="space-y-2">
             {navigationItems.map((item) => {
+              if (item.tenantAdmin && profile?.role !== "tenant_admin") return null;
               if (item.businessOnly && profile?.customerType !== "business") return null;
               if (item.businessAdmin &&
                   (profile?.customerType !== "business" || profile?.role !== "tenant_admin")) {

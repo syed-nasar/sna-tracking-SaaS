@@ -52,11 +52,11 @@ export function Notes({ name = "notes", label = "Internal notes", value, maxLeng
   );
 }
 
-export function Lookup({ path, params, name, label, value, currentLabel, onChange, disabled, required, blank = "Select a record" }) {
+export function Lookup({ path, params, name, label, value, currentLabel, onChange, disabled, required, blank = "Select a record", apiRoot, formatOption }) {
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState(value ? { id: value, name: currentLabel || `#${value}` } : null);
-  const { data, error } = useConnectivityGet(path, { ...params, q: query, offset });
+  const { data, error } = useConnectivityGet(path, { ...params, q: query, offset }, 0, apiRoot);
   const rows = data?.data ?? [];
   const options = selected && !rows.some((row) => row.id === selected.id) ? [selected, ...rows] : rows;
   return (
@@ -74,7 +74,7 @@ export function Lookup({ path, params, name, label, value, currentLabel, onChang
           }}>
           <option value="">{blank}</option>
           {options.map((row) => <option value={row.id} key={row.id}>
-            {row.name}{row.tenantName ? ` · ${row.tenantName}` : ""}
+            {formatOption ? formatOption(row) : row.name}{row.tenantName ? ` · ${row.tenantName}` : ""}
             {row.simLabel ? ` · SIM ${row.simLabel}` : ""}
           </option>)}
         </select>

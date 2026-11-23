@@ -20,6 +20,7 @@ import {
 
 import { platformApi } from "../../services/api";
 import ConnectivitySummary from "./connectivity/ConnectivitySummary";
+import { BillingReport } from "../billing/BillingOverview";
 import { useConnectivityGet } from "./connectivity/connectivity-data";
 import { useAuth } from "../../context/AuthContext";
 
@@ -399,6 +400,9 @@ export default function PlatformDashboard() {
 
           <div className="mb-6">
             <ConnectivitySummary {...connectivity} compact />
+          </div>
+          <div className="mb-6">
+            <BillingReport compact />
           </div>
           <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard

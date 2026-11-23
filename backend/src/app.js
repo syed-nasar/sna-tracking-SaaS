@@ -16,6 +16,7 @@ const vehicleImageRoutes = require("./routes/vehicle-image.routes");
 const userRoutes = require("./routes/user.routes");
 const fleetRoutes = require("./routes/fleet.routes");
 const connectivityRoutes = require("./routes/connectivity.routes");
+const billingRoutes = require("./routes/billing.routes");
 
 const invitationAcceptanceRouter = require("./routes/invitation-acceptance.routes");
 
@@ -52,6 +53,7 @@ app.use("/api/platform/tenants", platformTenantRoutes);
 
 app.use("/api/platform/devices", platformDeviceRoutes);
 app.use("/api/platform/connectivity", connectivityRoutes.platform);
+app.use("/api/platform/billing", billingRoutes.platform);
 
 // Vehicle image routes are mounted before
 // the existing vehicle routes.
@@ -62,6 +64,7 @@ app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/fleet", fleetRoutes);
 app.use("/api/connectivity", connectivityRoutes.tenant);
+app.use("/api/billing", billingRoutes.tenant);
 
 // Unknown API endpoint.
 app.use((req, res) => {

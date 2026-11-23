@@ -24,6 +24,9 @@ import CompanyOnboarding from "./pages/platform/CompanyOnboarding";
 import InvitationAcceptance from "./pages/InvitationAcceptance";
 import DeviceInventoryPage from "./pages/platform/DeviceInventoryPage";
 import SimConnectivityPage from "./pages/platform/SimConnectivityPage";
+import BillingPage from "./pages/billing/BillingPage";
+import CustomerBillingPage from "./pages/billing/CustomerBillingPage";
+import { PrintableInvoice } from "./pages/billing/BillingInvoices";
 
 function HomeRedirect() {
   const { session } = useAuth();
@@ -80,12 +83,16 @@ export default function App() {
           <Route path="/users" element={<UserManagementPage />} />
           <Route path="/fleet" element={<FleetOperationsPage />} />
           <Route path="/devices" element={<CustomerDevicesPage />} />
+          <Route path="/billing" element={<CustomerBillingPage />} />
+          <Route path="/billing/invoices/:id/print" element={<PrintableInvoice platform={false} />} />
         </Route>
 
         {/* Platform Admin routes */}
         <Route element={<ProtectedRoute type="platform" />}>
           <Route path="/platform/devices" element={<DeviceInventoryPage />} />
           <Route path="/platform/connectivity" element={<SimConnectivityPage />} />
+          <Route path="/platform/billing" element={<BillingPage />} />
+          <Route path="/platform/billing/invoices/:id/print" element={<PrintableInvoice platform />} />
           <Route
             path="/platform/dashboard"
             element={<PlatformDashboard />}
