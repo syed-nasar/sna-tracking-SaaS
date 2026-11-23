@@ -362,6 +362,10 @@ export default function PlatformDashboard() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={() => navigate("/platform/devices")}
+                className="rounded-xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-slate-300 hover:bg-white/10">
+                GPS Device Inventory
+              </button>
               <button
                 type="button"
                 onClick={() =>

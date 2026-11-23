@@ -23,6 +23,7 @@ import {
 import TenantLayout from "../components/TenantLayout";
 import FleetGroupFilter from "../components/FleetGroupFilter";
 import VehicleOperations from "../components/VehicleOperations";
+import VehicleGpsInstallation from "../components/VehicleGpsInstallation";
 import { useAuth } from "../context/AuthContext";
 import { tenantApi } from "../services/api";
 
@@ -213,6 +214,7 @@ export default function VehiclesPage() {
   const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
   const [operationsId, setOperationsId] = useState(null);
+  const [installationVehicle, setInstallationVehicle] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] =
     useState(null);
@@ -531,12 +533,6 @@ export default function VehiclesPage() {
 
         savedVehicleId = response.data.id;
       } else {
-        if (!form.traccarDeviceId) {
-          throw new Error(
-            "Please select an available GPS device."
-          );
-        }
-
         const response = await tenantApi.post(
           "/vehicles",
           {
@@ -547,7 +543,7 @@ export default function VehiclesPage() {
             make: form.make.trim() || null,
             model: form.model.trim() || null,
             traccarDeviceId:
-              form.traccarDeviceId,
+              form.traccarDeviceId || null,
           }
         );
 
@@ -791,7 +787,7 @@ export default function VehiclesPage() {
                       </td>
 
                       <td className="px-6 py-5 text-sm text-slate-400">
-                        #{vehicle.traccarDeviceId}
+                        {vehicle.traccarDeviceId ? `#${vehicle.traccarDeviceId}` : "Not installed"}
                       </td>
 
                       <td className="px-6 py-5">
@@ -808,6 +804,13 @@ export default function VehiclesPage() {
                       </td>
 
                       <td className="px-6 py-5">
+                        {canManage && (
+                          <button type="button" onClick={() => setInstallationVehicle(vehicle)}
+                            aria-label={`GPS device for ${vehicle.name}`}
+                            className="mr-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/10">
+                            GPS device
+                          </button>
+                        )}
                         {isBusiness && (
                           <button type="button" onClick={() => setOperationsId(vehicle.id)}
                             aria-label={`Operations for ${vehicle.name}`}
@@ -972,7 +975,7 @@ export default function VehiclesPage() {
                   <FormField label="GPS Device">
                     <input
                       className={`${inputClass} cursor-not-allowed opacity-60`}
-                      value={`Device #${form.traccarDeviceId}`}
+                      value={form.traccarDeviceId ? `Device #${form.traccarDeviceId}` : "Not installed"}
                       disabled
                     />
                   </FormField>
@@ -998,10 +1001,7 @@ export default function VehiclesPage() {
                   </FormField>
                 </>
               ) : (
-                <FormField
-                  label="Available GPS Device"
-                  required
-                >
+                <FormField label="GPS Device (optional)">
                   <select
                     className={inputClass}
                     value={form.traccarDeviceId}
@@ -1015,12 +1015,11 @@ export default function VehiclesPage() {
                       devicesLoading ||
                       availableDevices.length === 0
                     }
-                    required
                   >
                     <option value="">
                       {devicesLoading
                         ? "Loading GPS devices..."
-                        : "Select a GPS device"}
+                        : "No GPS device"}
                     </option>
 
                     {availableDevices.map((device) => (
@@ -1193,12 +1192,7 @@ export default function VehiclesPage() {
                 <button
                   type="submit"
                   disabled={
-                    saving ||
-                    removingImage ||
-                    (!editingVehicle &&
-                      (devicesLoading ||
-                        availableDevices.length === 0 ||
-                        !form.traccarDeviceId))
+                    saving || removingImage
                   }
                   className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -1223,6 +1217,10 @@ export default function VehiclesPage() {
       {isBusiness && operationsVehicle && (
         <VehicleOperations key={operationsVehicle.id} vehicle={operationsVehicle} canManage={canManage}
           onClose={() => setOperationsId(null)} onSaved={loadVehicles} />
+      )}
+      {canManage && installationVehicle && (
+        <VehicleGpsInstallation vehicle={installationVehicle}
+          onClose={() => setInstallationVehicle(null)} onSaved={loadVehicles} />
       )}
     </TenantLayout>
   );

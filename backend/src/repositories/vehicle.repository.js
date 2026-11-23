@@ -5,6 +5,7 @@ const VEHICLE_FIELDS = `
   id,
   tenant_id,
   traccar_device_id,
+  gps_installed_at,
   name,
   registration_number,
   make,
@@ -51,8 +52,8 @@ async function getVehicleById(tenantId, vehicleId) {
   return result.rows[0] || null;
 }
 
-async function createVehicle(tenantId, details) {
-  const result = await pool.query(
+async function createVehicle(tenantId, details, client = pool) {
+  const result = await client.query(
     `INSERT INTO vehicles (
        tenant_id,
        traccar_device_id,
@@ -61,9 +62,11 @@ async function createVehicle(tenantId, details) {
        make,
        model,
        image_url,
-       image_type
+       image_type,
+       gps_installed_at
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+       CASE WHEN $2::bigint IS NULL THEN NULL ELSE clock_timestamp() END)
      RETURNING ${VEHICLE_FIELDS}`,
     [
       tenantId,

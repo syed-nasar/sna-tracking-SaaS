@@ -1,5 +1,6 @@
 
 const express = require("express");
+const { parseId: parsePositiveId, respondError, recordVehicleCreation, setInstallation } = require("../services/gps-inventory.service");
 const router = express.Router();
 
 const pool = require("../config/db");
@@ -9,21 +10,6 @@ const vehicleRepository = require("../repositories/vehicle.repository");
 const traccarService = require("../services/traccar.service");
 
 router.use(requireAuth, authorize("vehicles:read"));
-
-const MAX_ID = 9223372036854775807n;
-
-function parsePositiveId(value) {
-  if (!/^[1-9]\d*$/.test(String(value))) {
-    return null;
-  }
-
-  try {
-    const id = BigInt(value);
-    return id <= MAX_ID ? String(id) : null;
-  } catch {
-    return null;
-  }
-}
 
 function isObject(value) {
   return (
@@ -117,20 +103,38 @@ function formatVehicle(vehicle) {
   };
 }
 
+function positionBelongsToInstallation(position, vehicle) {
+  if (!position) return false;
+  if (!vehicle.gps_installed_at) return true;
+  // Traccar keeps the last fix after a tracker moves to a new vehicle or tenant.
+  const installed = new Date(vehicle.gps_installed_at).valueOf();
+  return Date.parse(position.serverTime) > installed &&
+    Date.parse(position.fixTime ?? position.deviceTime) > installed;
+}
+
+function latestPositionsByDevice(positions) {
+  const latest = new Map();
+  for (const position of positions) {
+    const key = String(position.deviceId);
+    const received = Date.parse(position.serverTime ?? position.fixTime ?? position.deviceTime);
+    const previous = latest.get(key);
+    if (!previous || received > previous.received ||
+        (Number.isFinite(received) && !Number.isFinite(previous.received))) {
+      latest.set(key, { position, received });
+    }
+  }
+  return latest;
+}
+
 // GET /api/vehicles
 router.get("/", async (req, res) => {
   try {
     const includeOperations = req.auth.customerType === "business";
-    const vehicles =
-      await vehicleRepository.getVehiclesByTenant(
-        req.auth.tenantId,
-        includeOperations
-      );
-
     const devices = await traccarService.getDevices().catch((error) => {
       console.error("Unable to retrieve GPS device status:", error.code || error.response?.status || "unavailable");
       return [];
     });
+    const vehicles = await vehicleRepository.getVehiclesByTenant(req.auth.tenantId, includeOperations);
 
     const devicesById = new Map(
       devices.map((device) => [
@@ -140,9 +144,12 @@ router.get("/", async (req, res) => {
     );
 
     const response = vehicles.map((vehicle) => {
-      const device = devicesById.get(
+      const liveDevice = devicesById.get(
         String(vehicle.traccar_device_id)
       );
+      const device = !vehicle.gps_installed_at ||
+        Date.parse(liveDevice?.lastUpdate) > new Date(vehicle.gps_installed_at).valueOf()
+        ? liveDevice : null;
 
       return {
         ...formatVehicle(vehicle),
@@ -172,65 +179,64 @@ router.get("/", async (req, res) => {
   }
 });
 
-// GET /api/vehicles/available-devices
-router.get("/available-devices", async (req, res) => {
+async function listTenantDevices(req, res, availableOnly = false) {
+  res.set("Cache-Control", "private, no-store");
   try {
+    const tracked = await traccarService.getDevices().catch(() => []);
+    const live = new Map(tracked.map((device) => [String(device.id), device]));
     const result = await pool.query(
-      `SELECT
-         gd.traccar_device_id
-       FROM gps_devices gd
-       WHERE gd.tenant_id = $1
-         AND gd.status = 'assigned'
-         AND NOT EXISTS (
-           SELECT 1
-           FROM vehicles v
-           WHERE v.traccar_device_id = gd.traccar_device_id
-         )
-       ORDER BY gd.traccar_device_id`,
-      [req.auth.tenantId]
+      `SELECT d.id, d.traccar_device_id AS "traccarDeviceId",
+        d.device_name AS "deviceName", d.unique_identifier AS "uniqueId", d.manufacturer,
+        d.model, d.device_type AS "deviceType", d.lifecycle_status AS "lifecycleStatus",
+        v.id AS "vehicleId", v.name AS "vehicleName", v.gps_installed_at
+       FROM gps_devices d LEFT JOIN vehicles v
+         ON (v.traccar_device_id, v.tenant_id) = (d.traccar_device_id, d.tenant_id)
+       WHERE d.tenant_id = $1 AND (
+         NOT $2::boolean OR (d.lifecycle_status = 'reserved' AND d.traccar_device_id IS NOT NULL AND v.id IS NULL)
+       )
+       ORDER BY d.id`, [req.auth.tenantId, availableOnly]
     );
-
-    const devices = await traccarService.getDevices();
-
-    const devicesById = new Map(
-      devices.map((device) => [
-        String(device.id),
-        device,
-      ])
-    );
-
-    const response = result.rows
-      .map((record) => {
-        const device = devicesById.get(
-          String(record.traccar_device_id)
-        );
-
-        if (!device) {
-          return null;
-        }
-
-        return {
-          traccarDeviceId:
-            record.traccar_device_id,
-          deviceName: device.name,
-          uniqueId: device.uniqueId,
-          gpsStatus: device.status || "unknown",
-          lastUpdate: device.lastUpdate || null,
-        };
-      })
-      .filter(Boolean);
-
-    return res.json(response);
+    return res.json(result.rows.map(({ gps_installed_at, ...device }) => {
+      const info = live.get(device.traccarDeviceId);
+      const status = device.vehicleId && (!gps_installed_at ||
+        Date.parse(info?.lastUpdate) > new Date(gps_installed_at).valueOf()) ? info : null;
+      return {
+        ...device, deviceName: device.deviceName || info?.name || null,
+        uniqueId: device.uniqueId || info?.uniqueId || null,
+        gpsStatus: status?.status || "unknown", lastUpdate: status?.lastUpdate || null,
+      };
+    }));
   } catch (error) {
-    console.error(
-      "Failed to fetch available GPS devices:",
-      error.message
-    );
+    return respondError(res, error);
+  }
+}
 
-    return res.status(500).json({
-      message:
-        "Failed to fetch available GPS devices",
+router.get("/available-devices", (req, res) => listTenantDevices(req, res, true));
+router.get("/devices", (req, res) => listTenantDevices(req, res));
+
+router.put("/:id/gps-device", authorize("vehicles:write"), async (req, res) => {
+  const vehicleId = parsePositiveId(req.params.id);
+  const body = req.body;
+  if (!vehicleId || !isObject(body) || !Object.hasOwn(body, "traccarDeviceId") ||
+      Object.keys(body).some((key) => !["traccarDeviceId", "fromVehicleId", "expectedDeviceId"].includes(key))) {
+    return res.status(400).json({ message: "Invalid installation details." });
+  }
+  const deviceId = body.traccarDeviceId === null ? null : parsePositiveId(body.traccarDeviceId);
+  const source = body.fromVehicleId === undefined ? undefined : parsePositiveId(body.fromVehicleId);
+  const expected = body.expectedDeviceId == null ? body.expectedDeviceId : parsePositiveId(body.expectedDeviceId);
+  if ((body.traccarDeviceId !== null && !deviceId) ||
+      (body.fromVehicleId !== undefined && (!source || !deviceId || source === vehicleId)) ||
+      (body.expectedDeviceId != null && !expected)) {
+    return res.status(400).json({ message: "Invalid installation details." });
+  }
+  try {
+    await setInstallation({
+      tenantId: req.auth.tenantId, vehicleId, traccarDeviceId: deviceId,
+      fromVehicleId: source, expected, actor: req.auth,
     });
+    return res.status(204).end();
+  } catch (error) {
+    return respondError(res, error);
   }
 });
 
@@ -275,51 +281,16 @@ router.post(
       });
     }
 
-    const deviceId = parsePositiveId(
-      body.traccarDeviceId
-    );
+    const deviceId = body.traccarDeviceId == null ? null : parsePositiveId(body.traccarDeviceId);
 
-    if (!deviceId) {
+    if (body.traccarDeviceId != null && !deviceId) {
       return res.status(400).json({
         message: "Invalid Traccar device ID",
       });
     }
 
     try {
-      // Confirm the device is allocated to this tenant.
-      const allocationResult = await pool.query(
-        `SELECT traccar_device_id
-         FROM gps_devices
-         WHERE traccar_device_id = $1
-           AND tenant_id = $2
-           AND status = 'assigned'`,
-        [deviceId, req.auth.tenantId]
-      );
-
-      if (allocationResult.rowCount === 0) {
-        return res.status(403).json({
-          message:
-            "GPS device is not allocated to your company",
-        });
-      }
-
-      // Confirm the device exists in Traccar.
-      const devices =
-        await traccarService.getDevices();
-
-      const deviceExists = devices.some(
-        (device) =>
-          String(device.id) === deviceId
-      );
-
-      if (!deviceExists) {
-        return res.status(404).json({
-          message: "Traccar device not found",
-        });
-      }
-
-      const vehicle =
-        await vehicleRepository.createVehicle(
+      const create = (client) => vehicleRepository.createVehicle(
           req.auth.tenantId,
           {
             name: body.name.trim(),
@@ -333,8 +304,12 @@ router.post(
             traccarDeviceId: deviceId,
             imageUrl: body.imageUrl ?? null,
             imageType: body.imageType ?? null,
-          }
+          },
+          client
         );
+      const vehicle = deviceId
+        ? await recordVehicleCreation(req.auth.tenantId, deviceId, req.auth, create)
+        : await create();
 
       return res
         .status(201)
@@ -354,14 +329,7 @@ router.post(
         });
       }
 
-      console.error(
-        "Failed to create vehicle:",
-        error.message
-      );
-
-      return res.status(500).json({
-        message: "Failed to create vehicle",
-      });
+      return respondError(res, error);
     }
   }
 );
@@ -535,14 +503,21 @@ router.patch(
 );
 
 router.get("/positions", async (req, res) => {
+  res.set("Cache-Control", "private, no-store");
   try {
-    const vehicles = await vehicleRepository.getVehiclesByTenant(req.auth.tenantId);
-    if (!vehicles.length) return res.json([]);
+    const { tenantId } = req.auth;
+    const installed = await pool.query(
+      "SELECT 1 FROM vehicles WHERE tenant_id = $1 AND traccar_device_id IS NOT NULL LIMIT 1",
+      [tenantId]
+    );
+    if (!installed.rowCount) return res.json([]);
     const positions = await traccarService.getPositions();
-    const byDevice = new Map(positions.map((position) => [String(position.deviceId), position]));
+    const vehicles = await vehicleRepository.getVehiclesByTenant(tenantId);
+    const byDevice = latestPositionsByDevice(positions);
     return res.json(vehicles.flatMap((vehicle) => {
-      const position = byDevice.get(String(vehicle.traccar_device_id));
-      return position ? [{ vehicleId: vehicle.id, position }] : [];
+      const position = byDevice.get(String(vehicle.traccar_device_id))?.position;
+      return vehicle.traccar_device_id && positionBelongsToInstallation(position, vehicle)
+        ? [{ vehicleId: vehicle.id, position }] : [];
     }));
   } catch (error) {
     console.error("Unable to retrieve GPS positions:", error.code || error.response?.status || "unavailable");
@@ -552,6 +527,7 @@ router.get("/positions", async (req, res) => {
 
 // GET /api/vehicles/:id/position
 router.get("/:id/position", async (req, res) => {
+  res.set("Cache-Control", "private, no-store");
   const vehicleId = parsePositiveId(
     req.params.id
   );
@@ -575,16 +551,16 @@ router.get("/:id/position", async (req, res) => {
       });
     }
 
-    const positions =
-      await traccarService.getPositions();
+    if (!vehicle.traccar_device_id) {
+      return res.status(404).json({ message: "No GPS device is installed on this vehicle" });
+    }
+    const positions = await traccarService.getPositions();
+    const current = await vehicleRepository.getVehicleById(req.auth.tenantId, vehicleId);
 
-    const position = positions.find(
-      (item) =>
-        String(item.deviceId) ===
-        String(vehicle.traccar_device_id)
-    );
+    const position = current?.traccar_device_id &&
+      latestPositionsByDevice(positions).get(String(current.traccar_device_id))?.position;
 
-    if (!position) {
+    if (!positionBelongsToInstallation(position, current)) {
       return res.status(404).json({
         message:
           "No GPS position available for this vehicle",
@@ -592,10 +568,10 @@ router.get("/:id/position", async (req, res) => {
     }
 
     return res.json({
-      vehicleId: vehicle.id,
-      vehicleName: vehicle.name,
+      vehicleId: current.id,
+      vehicleName: current.name,
       traccarDeviceId:
-        vehicle.traccar_device_id,
+        current.traccar_device_id,
       position,
     });
   } catch (error) {

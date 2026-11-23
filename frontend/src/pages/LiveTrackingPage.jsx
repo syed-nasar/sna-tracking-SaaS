@@ -444,7 +444,7 @@ function SelectedVehicleDetails({ vehicle, showOperations, positionError }) {
 
           <DetailRow
             label="GPS Device"
-            value={`#${vehicle.traccarDeviceId}`}
+            value={vehicle.traccarDeviceId ? `#${vehicle.traccarDeviceId}` : "Not installed"}
           />
 
           <DetailRow

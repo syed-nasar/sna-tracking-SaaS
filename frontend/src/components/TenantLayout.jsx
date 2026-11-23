@@ -4,6 +4,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 
 import {
   Building2,
+  Cpu,
   ClipboardList,
   LayoutDashboard,
   LogOut,
@@ -36,6 +37,12 @@ const navigationItems = [
     path: "/fleet",
     icon: ClipboardList,
     businessOnly: true,
+  },
+  {
+    personalLabel: "My GPS Devices",
+    businessLabel: "Fleet GPS Devices",
+    path: "/devices",
+    icon: Cpu,
   },
   {
     personalLabel: "My Tracking",

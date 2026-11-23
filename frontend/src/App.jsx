@@ -16,11 +16,13 @@ import LiveTrackingPage from "./pages/LiveTrackingPage";
 import AccountPage from "./pages/AccountPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import FleetOperationsPage from "./pages/FleetOperationsPage";
+import CustomerDevicesPage from "./pages/CustomerDevicesPage";
 
 import PlatformDashboard from "./pages/platform/PlatformDashboard";
 import TenantDetails from "./pages/platform/TenantDetails";
 import CompanyOnboarding from "./pages/platform/CompanyOnboarding";
 import InvitationAcceptance from "./pages/InvitationAcceptance";
+import DeviceInventoryPage from "./pages/platform/DeviceInventoryPage";
 
 function HomeRedirect() {
   const { session } = useAuth();
@@ -76,10 +78,12 @@ export default function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/users" element={<UserManagementPage />} />
           <Route path="/fleet" element={<FleetOperationsPage />} />
+          <Route path="/devices" element={<CustomerDevicesPage />} />
         </Route>
 
         {/* Platform Admin routes */}
         <Route element={<ProtectedRoute type="platform" />}>
+          <Route path="/platform/devices" element={<DeviceInventoryPage />} />
           <Route
             path="/platform/dashboard"
             element={<PlatformDashboard />}
