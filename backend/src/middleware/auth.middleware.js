@@ -50,7 +50,8 @@ async function requireAuth(req, res, next) {
          u.role,
          u.is_active,
          u.token_version,
-         t.status AS tenant_status
+         t.status AS tenant_status,
+         t.customer_type
        FROM users u
        JOIN tenants t ON t.id = u.tenant_id
        WHERE u.id = $1`,
@@ -80,6 +81,8 @@ async function requireAuth(req, res, next) {
       tenantId: user.tenant_id,
       role: user.role,
       email: user.email,
+      customerType: user.customer_type,
+      tokenVersion: user.token_version,
     };
 
     next();

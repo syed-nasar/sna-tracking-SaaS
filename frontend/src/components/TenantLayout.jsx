@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import {
@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Truck,
   UserRound,
+  Users,
   X,
 } from "lucide-react";
 
@@ -35,6 +36,18 @@ const navigationItems = [
     path: "/tracking",
     icon: MapPinned,
   },
+  {
+    personalLabel: "My Account",
+    businessLabel: "Company Account",
+    path: "/account",
+    icon: UserRound,
+  },
+  {
+    businessLabel: "User Management",
+    path: "/users",
+    icon: Users,
+    businessAdmin: true,
+  },
 ];
 
 export default function TenantLayout({
@@ -42,8 +55,12 @@ export default function TenantLayout({
   title = "Fleet Console",
 }) {
   const navigate = useNavigate();
-  const { session, logout } = useAuth();
+  const { session, logout, refreshTenantProfile } = useAuth();
   const profile = session?.profile;
+
+  useEffect(() => {
+    void refreshTenantProfile();
+  }, [refreshTenantProfile]);
 
   const isPersonal = profile?.customerType === "personal";
 
@@ -117,13 +134,18 @@ export default function TenantLayout({
         </div>
 
         {/* Navigation */}
-        <nav className="px-4 pt-7">
+        <nav className="min-h-0 overflow-y-auto px-4 pt-7">
           <p className="mb-4 px-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-600">
             {accountLabels.workspace}
           </p>
 
           <div className="space-y-2">
             {navigationItems.map((item) => {
+              if (item.businessAdmin &&
+                  (profile?.customerType !== "business" || profile?.role !== "tenant_admin")) {
+                return null;
+              }
+
               const Icon = item.icon;
 
               const label = isPersonal

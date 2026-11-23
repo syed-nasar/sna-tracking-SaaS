@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -32,11 +33,43 @@ function getTokenExpiry(token) {
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
+  const tenantSessionId = useRef(null);
+  const profileRequest = useRef(null);
 
   const logout = useCallback(() => {
+    tenantSessionId.current = null;
+    profileRequest.current?.abort();
     clearAccessTokens();
     setSession(null);
   }, []);
+
+  const refreshTenantProfile = useCallback(async () => {
+    const sessionId = tenantSessionId.current;
+    if (!sessionId) return;
+
+    profileRequest.current?.abort();
+    const controller = new AbortController();
+    profileRequest.current = controller;
+
+    try {
+      const { data } = await tenantApi.get("/users/me", {
+        signal: controller.signal,
+        handleSessionError: true,
+      });
+      if (controller.signal.aborted) return;
+      setSession((current) => current?.id === sessionId
+        ? { ...current, profile: { ...current.profile, ...data } }
+        : current);
+    } catch (error) {
+      const status = error.response?.status;
+      if (!controller.signal.aborted && tenantSessionId.current === sessionId &&
+          (status === 401 || status === 403)) {
+        logout();
+      }
+    } finally {
+      if (profileRequest.current === controller) profileRequest.current = null;
+    }
+  }, [logout]);
 
   const signInTenant = async (credentials) => {
     const data = await loginTenant(credentials);
@@ -53,8 +86,11 @@ export function AuthProvider({ children }) {
 
     clearAccessTokens();
     setTenantAccessToken(data.accessToken);
+    const id = Symbol();
+    tenantSessionId.current = id;
 
     setSession({
+      id,
       type: "tenant",
       profile: data.user,
       expiresAt,
@@ -78,6 +114,8 @@ export function AuthProvider({ children }) {
 
     clearAccessTokens();
     setPlatformAccessToken(data.accessToken);
+    tenantSessionId.current = null;
+    profileRequest.current?.abort();
 
     setSession({
       type: "platform",
@@ -87,6 +125,24 @@ export function AuthProvider({ children }) {
 
     return data.admin;
   };
+
+  const sessionType = session?.type;
+  useEffect(() => {
+    if (sessionType !== "tenant") return;
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshTenantProfile();
+    };
+    const timer = window.setInterval(refreshWhenVisible, 30_000);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      profileRequest.current?.abort();
+    };
+  }, [sessionType, refreshTenantProfile]);
 
   useEffect(() => {
     if (!session) return;
@@ -105,7 +161,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const onRejected = (error) => {
-      if (error.response?.status === 401) {
+      if (error.response?.status === 401 && !error.config?.handleSessionError) {
         logout();
       }
 
@@ -141,6 +197,7 @@ export function AuthProvider({ children }) {
         session,
         signInTenant,
         signInPlatform,
+        refreshTenantProfile,
         logout,
       }}
     >

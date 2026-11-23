@@ -13,6 +13,8 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import VehiclesPage from "./pages/VehiclesPage";
 import LiveTrackingPage from "./pages/LiveTrackingPage";
+import AccountPage from "./pages/AccountPage";
+import UserManagementPage from "./pages/UserManagementPage";
 
 import PlatformDashboard from "./pages/platform/PlatformDashboard";
 import TenantDetails from "./pages/platform/TenantDetails";
@@ -70,6 +72,8 @@ export default function App() {
             path="/tracking"
             element={<LiveTrackingPage />}
           />
+          <Route path="/account" element={<AccountPage />} />
+          <Route path="/users" element={<UserManagementPage />} />
         </Route>
 
         {/* Platform Admin routes */}
