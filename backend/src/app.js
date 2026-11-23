@@ -17,6 +17,7 @@ const userRoutes = require("./routes/user.routes");
 const fleetRoutes = require("./routes/fleet.routes");
 const connectivityRoutes = require("./routes/connectivity.routes");
 const billingRoutes = require("./routes/billing.routes");
+const alertRoutes = require("./routes/alerts.routes");
 
 const invitationAcceptanceRouter = require("./routes/invitation-acceptance.routes");
 
@@ -27,10 +28,15 @@ app.disable("x-powered-by");
 // Security headers.
 app.use(helmet());
 
-// Development frontend origin.
+// Allow the localhost alias only in development.
+const frontendOrigins = ["http://127.0.0.1:3001"];
+if (process.env.NODE_ENV === "development") {
+  frontendOrigins.push("http://localhost:3001");
+}
+
 app.use(
   cors({
-    origin: "http://127.0.0.1:3001",
+    origin: frontendOrigins,
   })
 );
 
@@ -65,6 +71,9 @@ app.use("/api/users", userRoutes);
 app.use("/api/fleet", fleetRoutes);
 app.use("/api/connectivity", connectivityRoutes.tenant);
 app.use("/api/billing", billingRoutes.tenant);
+app.use("/api/alerts", alertRoutes.tenant);
+app.use("/api/platform/alerts", alertRoutes.platform);
+app.use("/api/telemetry/traccar", alertRoutes.source);
 
 // Unknown API endpoint.
 app.use((req, res) => {

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { ClipboardList, Cpu, LayoutDashboard, MapPinned, Receipt, Truck, UserRound, Users } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import AppShell from "./AppShell";
+import { Bell, ShieldAlert } from "lucide-react";
 
 export default function TenantLayout({ children, title = "Fleet Console" }) {
   const { session, refreshTenantProfile } = useAuth();
@@ -21,6 +22,10 @@ export default function TenantLayout({ children, title = "Fleet Console" }) {
     ] },
     { name: "Connectivity", items: [
       { to: "/devices", label: personal ? "My GPS Devices" : "Fleet GPS Devices", icon: Cpu },
+    ] },
+    { name: "Alerts", items: [
+      { to: "/alerts", label: "Alerts & Geofences", icon: ShieldAlert },
+      { to: "/notifications", label: "Notifications", icon: Bell },
     ] },
     { name: "Account", items: [
       { to: "/account", label: personal ? "My Account" : "Company Account", icon: UserRound },

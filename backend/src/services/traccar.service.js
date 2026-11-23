@@ -43,4 +43,7 @@ module.exports = {
   getDevices,
   getPositions,
   createDevice,
+  async geofenceRequest(method,path,data,params) {
+    return (await traccarApi.request({method,url:`/api/${path}`,data,params})).data;
+  },
 };

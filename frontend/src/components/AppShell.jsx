@@ -3,6 +3,7 @@ import { ChevronDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Truck, UserRo
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ThemeSelector from "./ThemeSelector";
+import NotificationBell from "./NotificationBell";
 
 function Navigation({ groups, collapsed = false, onNavigate }) {
   return <nav aria-label="Workspace navigation" className="min-h-0 flex-1 space-y-5 overflow-y-auto px-2.5 py-4">
@@ -94,6 +95,7 @@ export default function AppShell({ children, title, workspace, groups, platform 
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ThemeSelector />
+          {!platform && <NotificationBell />}
           <details ref={accountMenu} className="relative" onKeyDown={(event) => {
             if (event.key === "Escape" && accountMenu.current.open) {
               accountMenu.current.open = false;

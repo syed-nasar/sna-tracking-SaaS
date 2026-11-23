@@ -1,4 +1,4 @@
-import { Cpu, LayoutDashboard, Receipt, Signal, UserPlus } from "lucide-react";
+import { Cpu, LayoutDashboard, Receipt, ShieldAlert, Signal, UserPlus } from "lucide-react";
 import { Outlet, useLocation } from "react-router-dom";
 import AppShell from "./AppShell";
 
@@ -10,6 +10,7 @@ const groups = [
   { name: "Operations", items: [
     { to: "/platform/devices", label: "GPS Device Inventory", icon: Cpu },
     { to: "/platform/connectivity", label: "SIM & Connectivity", icon: Signal },
+    { to: "/platform/alerts", label: "Alert diagnostics", icon: ShieldAlert },
   ] },
   { name: "Finance", items: [
     { to: "/platform/billing", label: "Subscriptions & Billing", icon: Receipt },

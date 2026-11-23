@@ -9,6 +9,7 @@ import { lazy, Suspense } from "react";
 
 import { useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import PlatformAlertDiagnostics from "./pages/platform/PlatformAlertDiagnostics";
 import PlatformLayout from "./components/PlatformLayout";
 import { StateNotice } from "./components/WorkspaceUi";
 
@@ -28,6 +29,7 @@ import CustomerBillingPage from "./pages/billing/CustomerBillingPage";
 import { PrintableInvoice } from "./pages/billing/BillingInvoices";
 
 const LiveTrackingPage = lazy(() => import("./pages/LiveTrackingPage"));
+const AlertsPage = lazy(() => import("./pages/AlertsPage"));
 const DeviceInventoryPage = lazy(() => import("./pages/platform/DeviceInventoryPage"));
 const SimConnectivityPage = lazy(() => import("./pages/platform/SimConnectivityPage"));
 const BillingPage = lazy(() => import("./pages/billing/BillingPage"));
@@ -93,6 +95,9 @@ export default function App() {
           <Route path="/users" element={<UserManagementPage />} />
           <Route path="/fleet" element={<FleetOperationsPage />} />
           <Route path="/devices" element={<CustomerDevicesPage />} />
+          <Route path="/alerts" element={<DeferredPage><AlertsPage /></DeferredPage>} />
+          <Route path="/notifications" element={<DeferredPage><AlertsPage notifications /></DeferredPage>} />
+          <Route path="/alerts/events/:eventId" element={<DeferredPage><AlertsPage /></DeferredPage>} />
           <Route path="/billing" element={<CustomerBillingPage />} />
           <Route path="/billing/invoices/:id/print" element={<PrintableInvoice platform={false} />} />
         </Route>
@@ -105,6 +110,7 @@ export default function App() {
             <Route path="/platform/connectivity" element={<DeferredPage><SimConnectivityPage /></DeferredPage>} />
             <Route path="/platform/billing" element={<DeferredPage><BillingPage /></DeferredPage>} />
             <Route path="/platform/dashboard" element={<PlatformDashboard />} />
+            <Route path="/platform/alerts" element={<PlatformAlertDiagnostics />} />
             <Route path="/platform/tenants/new" element={<CompanyOnboarding />} />
             <Route path="/platform/tenants/:id" element={<TenantDetails />} />
           </Route>
