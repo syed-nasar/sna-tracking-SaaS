@@ -4,6 +4,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 
 import {
   Building2,
+  ClipboardList,
   LayoutDashboard,
   LogOut,
   MapPinned,
@@ -29,6 +30,12 @@ const navigationItems = [
     businessLabel: "Fleet Vehicles",
     path: "/vehicles",
     icon: Truck,
+  },
+  {
+    businessLabel: "Fleet Operations",
+    path: "/fleet",
+    icon: ClipboardList,
+    businessOnly: true,
   },
   {
     personalLabel: "My Tracking",
@@ -141,6 +148,7 @@ export default function TenantLayout({
 
           <div className="space-y-2">
             {navigationItems.map((item) => {
+              if (item.businessOnly && profile?.customerType !== "business") return null;
               if (item.businessAdmin &&
                   (profile?.customerType !== "business" || profile?.role !== "tenant_admin")) {
                 return null;

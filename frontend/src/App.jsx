@@ -15,6 +15,7 @@ import VehiclesPage from "./pages/VehiclesPage";
 import LiveTrackingPage from "./pages/LiveTrackingPage";
 import AccountPage from "./pages/AccountPage";
 import UserManagementPage from "./pages/UserManagementPage";
+import FleetOperationsPage from "./pages/FleetOperationsPage";
 
 import PlatformDashboard from "./pages/platform/PlatformDashboard";
 import TenantDetails from "./pages/platform/TenantDetails";
@@ -74,6 +75,7 @@ export default function App() {
           />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/users" element={<UserManagementPage />} />
+          <Route path="/fleet" element={<FleetOperationsPage />} />
         </Route>
 
         {/* Platform Admin routes */}

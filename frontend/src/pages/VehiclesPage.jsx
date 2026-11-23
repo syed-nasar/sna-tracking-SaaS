@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 
 import TenantLayout from "../components/TenantLayout";
+import FleetGroupFilter from "../components/FleetGroupFilter";
+import VehicleOperations from "../components/VehicleOperations";
 import { useAuth } from "../context/AuthContext";
 import { tenantApi } from "../services/api";
 
@@ -166,6 +168,7 @@ export default function VehiclesPage() {
   const profile = session?.profile;
   const role = profile?.role;
   const isPersonal = profile?.customerType === "personal";
+  const isBusiness = profile?.customerType === "business";
   const labels = isPersonal
     ? {
         layoutTitle: "My Vehicles",
@@ -208,6 +211,8 @@ export default function VehiclesPage() {
   const [success, setSuccess] = useState("");
 
   const [search, setSearch] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
+  const [operationsId, setOperationsId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] =
     useState(null);
@@ -274,28 +279,32 @@ export default function VehiclesPage() {
     };
   }, [selectedImage]);
 
+  const activeGroup = isBusiness && (groupFilter === "ungrouped" ||
+    vehicles.some((vehicle) => vehicle.groupId === groupFilter)) ? groupFilter : "";
+  const operationsVehicle = vehicles.find((vehicle) => vehicle.id === operationsId);
+
   const filteredVehicles = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    if (!query) {
-      return vehicles;
-    }
-
     return vehicles.filter((vehicle) =>
-      [
+      (!activeGroup || (vehicle.groupId ?? "ungrouped") === activeGroup) &&
+      (!query || [
         vehicle.name,
         vehicle.registrationNumber,
         vehicle.make,
         vehicle.model,
         vehicle.traccarDeviceId,
         vehicle.id,
+        vehicle.fleetNumber,
+        vehicle.groupName,
+        vehicle.driverName,
       ].some((value) =>
         String(value ?? "")
           .toLowerCase()
           .includes(query)
-      )
+      ))
     );
-  }, [vehicles, search]);
+  }, [vehicles, search, activeGroup]);
 
   const loadAvailableDevices = async () => {
     setDevicesLoading(true);
@@ -666,6 +675,11 @@ export default function VehiclesPage() {
               </p>
             </div>
 
+            {isBusiness && (
+              <div className="w-full sm:w-52">
+                <FleetGroupFilter vehicles={vehicles} value={activeGroup} onChange={setGroupFilter} />
+              </div>
+            )}
             <div className="relative w-full sm:w-72">
               <Search
                 size={17}
@@ -705,9 +719,9 @@ export default function VehiclesPage() {
               />
 
               <p className="text-sm text-slate-400">
-                {search
-                  ? "No vehicles match your search."
-                  : labels.emptyMessage}
+                {activeGroup
+                  ? "No vehicles match your filters."
+                  : search ? "No vehicles match your search." : labels.emptyMessage}
               </p>
             </div>
           ) : (
@@ -752,6 +766,11 @@ export default function VehiclesPage() {
                               {vehicle.name ||
                                 `Vehicle ${vehicle.id}`}
                             </p>
+                            {isBusiness && (vehicle.groupName || vehicle.driverName) && (
+                              <p className="mt-1 text-xs text-slate-400">
+                                {[vehicle.groupName, vehicle.driverName].filter(Boolean).join(" · ")}
+                              </p>
+                            )}
 
                             <p className="mt-1 text-xs text-slate-500">
                               {[
@@ -789,6 +808,13 @@ export default function VehiclesPage() {
                       </td>
 
                       <td className="px-6 py-5">
+                        {isBusiness && (
+                          <button type="button" onClick={() => setOperationsId(vehicle.id)}
+                            aria-label={`Operations for ${vehicle.name}`}
+                            className="mr-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/10">
+                            Operations
+                          </button>
+                        )}
                         {canManage ? (
                           <button
                             type="button"
@@ -800,7 +826,7 @@ export default function VehiclesPage() {
                             <Pencil size={14} />
                             Edit
                           </button>
-                        ) : (
+                        ) : !isBusiness && (
                           <span className="text-xs text-slate-600">
                             View only
                           </span>
@@ -1193,6 +1219,10 @@ export default function VehiclesPage() {
             </form>
           </div>
         </div>
+      )}
+      {isBusiness && operationsVehicle && (
+        <VehicleOperations key={operationsVehicle.id} vehicle={operationsVehicle} canManage={canManage}
+          onClose={() => setOperationsId(null)} onSaved={loadVehicles} />
       )}
     </TenantLayout>
   );

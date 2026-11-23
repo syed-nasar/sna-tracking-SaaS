@@ -14,6 +14,7 @@ const vehicleRoutes = require("./routes/vehicle.routes");
 const vehicleImageRoutes = require("./routes/vehicle-image.routes");
 
 const userRoutes = require("./routes/user.routes");
+const fleetRoutes = require("./routes/fleet.routes");
 
 const invitationAcceptanceRouter = require("./routes/invitation-acceptance.routes");
 
@@ -57,6 +58,7 @@ app.use("/api/vehicles", vehicleImageRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 
 app.use("/api/users", userRoutes);
+app.use("/api/fleet", fleetRoutes);
 
 // Unknown API endpoint.
 app.use((req, res) => {

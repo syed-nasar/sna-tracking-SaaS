@@ -14,7 +14,20 @@ const VEHICLE_FIELDS = `
   image_type
 `;
 
-async function getVehiclesByTenant(tenantId) {
+async function getVehiclesByTenant(tenantId, includeOperations = false) {
+  if (includeOperations) {
+    const result = await pool.query(
+      `SELECT v.*, g.name AS group_name, d.id AS driver_id, d.full_name AS driver_name
+       FROM vehicles v
+       LEFT JOIN vehicle_groups g ON (g.id, g.tenant_id) = (v.group_id, v.tenant_id)
+       LEFT JOIN driver_assignments a ON (a.vehicle_id, a.tenant_id) = (v.id, v.tenant_id)
+         AND a.ended_at IS NULL
+       LEFT JOIN drivers d ON (d.id, d.tenant_id) = (a.driver_id, a.tenant_id)
+       WHERE v.tenant_id = $1 ORDER BY v.id`,
+      [tenantId]
+    );
+    return result.rows;
+  }
   const result = await pool.query(
     `SELECT ${VEHICLE_FIELDS}
      FROM vehicles

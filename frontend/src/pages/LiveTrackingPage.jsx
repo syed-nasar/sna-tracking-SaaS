@@ -33,6 +33,7 @@ import "leaflet/dist/leaflet.css";
 
 import { useAuth } from "../context/AuthContext";
 import TenantLayout from "../components/TenantLayout";
+import FleetGroupFilter from "../components/FleetGroupFilter";
 import { tenantApi } from "../services/api";
 
 const DEFAULT_CENTER = [24.8607, 67.0011];
@@ -394,7 +395,7 @@ function DetailRow({ label, value }) {
   );
 }
 
-function SelectedVehicleDetails({ vehicle }) {
+function SelectedVehicleDetails({ vehicle, showOperations, positionError }) {
   if (!vehicle) {
     return null;
   }
@@ -451,8 +452,16 @@ function SelectedVehicleDetails({ vehicle }) {
             value={vehicle.status || "unknown"}
           />
 
+          {showOperations && (
+            <>
+              <DetailRow label="Group" value={vehicle.groupName || "Ungrouped"} />
+              <DetailRow label="Driver" value={vehicle.driverName || "Unassigned"} />
+              <DetailRow label="Fleet number" value={vehicle.fleetNumber || "Unspecified"} />
+            </>
+          )}
+
           <DetailRow
-            label="Current Speed"
+            label="Last Reported Speed"
             value={
               hasPosition
                 ? formatSpeed(vehicle.position)
@@ -475,9 +484,7 @@ function SelectedVehicleDetails({ vehicle }) {
 
         {!hasPosition && (
           <p className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-400">
-            This vehicle has no reported GPS
-            coordinates yet. Its image and
-            registration details remain available.
+            {positionError || "This vehicle has no reported GPS coordinates yet."}
           </p>
         )}
       </div>
@@ -538,6 +545,7 @@ export default function LiveTrackingPage() {
   const profile = session?.profile;
 
   const isPersonal = profile?.customerType === "personal";
+  const isBusiness = profile?.customerType === "business";
 
   const labels = isPersonal
     ? {
@@ -579,6 +587,10 @@ export default function LiveTrackingPage() {
   const [positions, setPositions] = useState({});
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
+  const [gpsFilter, setGpsFilter] = useState("");
+  const [positionFilter, setPositionFilter] = useState("");
+  const [positionError, setPositionError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -616,36 +628,18 @@ export default function LiveTrackingPage() {
         const tenantVehicles = response.data;
         const nextPositions = {};
 
-        await Promise.all(
-          tenantVehicles.map(async (vehicle) => {
-            try {
-              const result = await tenantApi.get(
-                `/vehicles/${vehicle.id}/position`
-              );
-
-              if (
-                validCoordinates(
-                  result.data?.position
-                )
-              ) {
-                nextPositions[String(vehicle.id)] =
-                  result.data.position;
-              }
-            } catch (requestError) {
-              if (
-                requestError.response?.status !== 404
-              ) {
-                console.error(
-                  `Position request failed for vehicle ${vehicle.id}:`,
-                  requestError.message
-                );
-              }
-            }
-          })
-        );
-
         setVehicles(tenantVehicles);
-        setPositions(nextPositions);
+        try {
+          const result = await tenantApi.get("/vehicles/positions");
+          for (const { vehicleId, position } of result.data) {
+            if (validCoordinates(position)) nextPositions[String(vehicleId)] = position;
+          }
+          setPositions(nextPositions);
+          setPositionError("");
+        } catch {
+          setPositions({});
+          setPositionError("GPS positions are temporarily unavailable.");
+        }
       } catch (requestError) {
         setError(
           requestError.response?.data?.message ||
@@ -683,7 +677,7 @@ export default function LiveTrackingPage() {
     [vehicles, positions]
   );
 
-  const locatedVehicles = useMemo(
+  const allLocatedVehicles = useMemo(
     () =>
       trackedVehicles.filter((vehicle) =>
         validCoordinates(vehicle.position)
@@ -691,28 +685,47 @@ export default function LiveTrackingPage() {
     [trackedVehicles]
   );
 
+  const activeGroup = isBusiness && (groupFilter === "ungrouped" ||
+    trackedVehicles.some((vehicle) => vehicle.groupId === groupFilter)) ? groupFilter : "";
+  const activeGps = isBusiness ? gpsFilter : "";
+  const activePosition = isBusiness && !positionError ? positionFilter : "";
+  const hasFleetFilters = Boolean(activeGroup || activeGps || activePosition);
+  const fleetVehicles = useMemo(() => trackedVehicles.filter((vehicle) => (
+    (!activeGroup || (vehicle.groupId ?? "ungrouped") === activeGroup) &&
+    (!activeGps || (vehicle.gpsStatus || "unknown") === activeGps) &&
+    (!activePosition || validCoordinates(vehicle.position) === (activePosition === "located"))
+  )), [trackedVehicles, activeGroup, activeGps, activePosition]);
+
+  const locatedVehicles = useMemo(
+    () => hasFleetFilters ? fleetVehicles.filter((vehicle) => validCoordinates(vehicle.position)) : allLocatedVehicles,
+    [fleetVehicles, allLocatedVehicles, hasFleetFilters]
+  );
+
   const filteredVehicles = useMemo(() => {
     const query = search.trim().toLowerCase();
 
     if (!query) {
-      return trackedVehicles;
+      return fleetVehicles;
     }
 
-    return trackedVehicles.filter((vehicle) =>
+    return fleetVehicles.filter((vehicle) =>
       [
         vehicle.name,
         vehicle.registrationNumber,
         vehicle.make,
         vehicle.model,
+        vehicle.fleetNumber,
+        vehicle.groupName,
+        vehicle.driverName,
       ].some((value) =>
         String(value || "")
           .toLowerCase()
           .includes(query)
       )
     );
-  }, [trackedVehicles, search]);
+  }, [fleetVehicles, search]);
 
-  const selectedVehicle = trackedVehicles.find(
+  const selectedVehicle = fleetVehicles.find(
     (vehicle) =>
       String(vehicle.id) === String(selectedId)
   );
@@ -804,11 +817,11 @@ export default function LiveTrackingPage() {
             ],
             [
               "With GPS Position",
-              locatedVehicles.length,
+              positionError ? "—" : allLocatedVehicles.length,
             ],
             [
               "Without GPS Position",
-              vehicles.length - locatedVehicles.length,
+              positionError ? "—" : vehicles.length - allLocatedVehicles.length,
             ],
           ].map(([label, value]) => (
             <div
@@ -826,6 +839,7 @@ export default function LiveTrackingPage() {
           ))}
         </div>
 
+        {positionError && <p role="status" className="mb-4 text-sm text-amber-300">{positionError}</p>}
         {/* Vehicle List + Map */}
         <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
           {/* Sidebar */}
@@ -852,6 +866,25 @@ export default function LiveTrackingPage() {
                     className="w-full rounded-xl border border-white/10 bg-[#0b1220] py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-500"
                   />
                 </div>
+                {isBusiness && (
+                  <div className="mt-3 grid gap-2">
+                    <FleetGroupFilter vehicles={trackedVehicles} value={activeGroup} onChange={setGroupFilter} />
+                    <select aria-label="GPS status" value={gpsFilter} onChange={(event) => setGpsFilter(event.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-sm">
+                      <option value="">All GPS statuses</option>
+                      <option value="online">Online</option>
+                      <option value="offline">Offline</option>
+                      <option value="unknown">Unknown</option>
+                    </select>
+                    <select aria-label="Position availability" value={positionFilter} disabled={Boolean(positionError)}
+                      onChange={(event) => setPositionFilter(event.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-sm disabled:opacity-50">
+                      <option value="">All vehicle locations</option>
+                      <option value="located">With GPS position</option>
+                      <option value="missing">Without GPS position</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="max-h-[600px] overflow-y-auto p-3">
@@ -870,9 +903,9 @@ export default function LiveTrackingPage() {
                   </p>
                 ) : filteredVehicles.length === 0 ? (
                   <p className="py-12 px-3 text-center text-sm text-slate-500">
-                    {search.trim()
-                      ? labels.noSearchResults
-                      : labels.emptyVehicles}
+                    {hasFleetFilters
+                      ? "No vehicles match your filters."
+                      : search.trim() ? labels.noSearchResults : labels.emptyVehicles}
                   </p>
                 ) : (
                   filteredVehicles.map((vehicle) => (
@@ -896,6 +929,8 @@ export default function LiveTrackingPage() {
             {selectedVehicle && (
               <SelectedVehicleDetails
                 vehicle={selectedVehicle}
+                showOperations={isBusiness}
+                positionError={positionError}
               />
             )}
           </div>
@@ -960,7 +995,7 @@ export default function LiveTrackingPage() {
               </button>
 
               <span className="ml-auto text-xs text-slate-500">
-                {locatedVehicles.length} located
+                {positionError ? "GPS unavailable" : `${locatedVehicles.length} located`}
               </span>
             </div>
 
@@ -1031,7 +1066,7 @@ export default function LiveTrackingPage() {
                 !error &&
                 locatedVehicles.length === 0 && (
                   <div className="pointer-events-none absolute bottom-5 left-1/2 z-[500] w-[90%] max-w-md -translate-x-1/2 rounded-xl border border-white/10 bg-[#111827]/95 p-4 text-center text-sm text-slate-300 shadow-xl">
-                    {labels.noPositions}
+                    {positionError || (hasFleetFilters ? "No GPS positions match the selected filters." : labels.noPositions)}
                   </div>
                 )}
             </div>

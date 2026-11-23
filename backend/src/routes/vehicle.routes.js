@@ -120,12 +120,17 @@ function formatVehicle(vehicle) {
 // GET /api/vehicles
 router.get("/", async (req, res) => {
   try {
+    const includeOperations = req.auth.customerType === "business";
     const vehicles =
       await vehicleRepository.getVehiclesByTenant(
-        req.auth.tenantId
+        req.auth.tenantId,
+        includeOperations
       );
 
-    const devices = await traccarService.getDevices();
+    const devices = await traccarService.getDevices().catch((error) => {
+      console.error("Unable to retrieve GPS device status:", error.code || error.response?.status || "unavailable");
+      return [];
+    });
 
     const devicesById = new Map(
       devices.map((device) => [
@@ -143,6 +148,14 @@ router.get("/", async (req, res) => {
         ...formatVehicle(vehicle),
         gpsStatus: device?.status || "unknown",
         lastUpdate: device?.lastUpdate || null,
+        ...(includeOperations && {
+          groupId: vehicle.group_id,
+          groupName: vehicle.group_name,
+          driverId: vehicle.driver_id,
+          driverName: vehicle.driver_name,
+          fleetNumber: vehicle.fleet_number,
+          operationalNotes: vehicle.operational_notes,
+        }),
       };
     });
 
@@ -520,6 +533,22 @@ router.patch(
     }
   }
 );
+
+router.get("/positions", async (req, res) => {
+  try {
+    const vehicles = await vehicleRepository.getVehiclesByTenant(req.auth.tenantId);
+    if (!vehicles.length) return res.json([]);
+    const positions = await traccarService.getPositions();
+    const byDevice = new Map(positions.map((position) => [String(position.deviceId), position]));
+    return res.json(vehicles.flatMap((vehicle) => {
+      const position = byDevice.get(String(vehicle.traccar_device_id));
+      return position ? [{ vehicleId: vehicle.id, position }] : [];
+    }));
+  } catch (error) {
+    console.error("Unable to retrieve GPS positions:", error.code || error.response?.status || "unavailable");
+    return res.status(502).json({ message: "GPS positions are temporarily unavailable" });
+  }
+});
 
 // GET /api/vehicles/:id/position
 router.get("/:id/position", async (req, res) => {
