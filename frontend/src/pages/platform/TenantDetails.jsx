@@ -1,6 +1,8 @@
 
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import InvitationDelivery from "./InvitationDelivery";
+import useInvitationStatus from "./useInvitationStatus";
 import {
   ArrowLeft,
   Building2,
@@ -63,6 +65,8 @@ export default function TenantDetails() {
 
   const [reissuedInvitation, setReissuedInvitation] =
     useState(null);
+  const invitationStatus = useInvitationStatus(id,reissuedInvitation);
+  const reissuedToken = reissuedInvitation?.invitation?.manualToken ?? reissuedInvitation?.invitation?.developmentToken;
 
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
@@ -264,7 +268,7 @@ export default function TenantDetails() {
       setReissuedInvitation(response.data);
 
       setSuccess(
-        "Administrator invitation reissued successfully."
+        response.data.message
       );
     } catch (err) {
       setError(
@@ -276,9 +280,8 @@ export default function TenantDetails() {
     }
   };
 
-  const handleCopyToken = async () => {
-    const token =
-      reissuedInvitation?.invitation?.developmentToken;
+  const handleCopyToken = async (value) => {
+    const token = value ?? reissuedToken;
 
     if (!token) return;
 
@@ -637,6 +640,7 @@ export default function TenantDetails() {
                 </div>
               </div>
 
+              <InvitationDelivery invitation={invitationStatus?.invitation} error={invitationStatus?.error} />
               <button
                 type="button"
                 onClick={handleReissueInvitation}
@@ -644,7 +648,8 @@ export default function TenantDetails() {
                   reissuing ||
                   saving ||
                   updatingStatus ||
-                  tenant.status !== "active"
+                  tenant.status !== "active" ||
+                  !invitationStatus?.invitation?.canResend
                 }
                 className="mt-5 inline-flex items-center gap-2 rounded-xl bg-action px-5 py-3 text-sm font-semibold transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -659,7 +664,7 @@ export default function TenantDetails() {
 
                 {reissuing
                   ? "Reissuing Invitation..."
-                  : "Reissue Invitation"}
+                  : "Resend / Reissue Invitation"}
               </button>
 
               <p className="mt-3 text-xs text-subtle">
@@ -671,7 +676,7 @@ export default function TenantDetails() {
                 this endpoint.
               </p>
 
-              {reissuedInvitation && (
+              {reissuedToken && invitationStatus?.invitation?.state!=="closed" && (
                 <div className="mt-6 rounded-xl border border-caution-line bg-caution-soft p-5">
                   <p className="text-sm font-semibold text-caution">
                     New Invitation Created
@@ -691,27 +696,19 @@ export default function TenantDetails() {
                     )}
                   </p>
 
-                  {reissuedInvitation.invitation
-                    ?.developmentToken ? (
+                  {reissuedToken && (
                     <>
                       <p className="mt-4 text-xs leading-5 text-caution">
-                        Local development token. Copy
-                        it now; it cannot be retrieved
-                        after leaving this page. Do not
-                        share it publicly or store it
-                        in logs.
+                        Copy the token now and share it privately with the administrator.
                       </p>
 
                       <div className="mt-3 select-all break-all rounded-lg bg-canvas p-4 font-mono text-xs text-ink">
-                        {
-                          reissuedInvitation.invitation
-                            .developmentToken
-                        }
+                        {reissuedToken}
                       </div>
 
                       <button
                         type="button"
-                        onClick={handleCopyToken}
+                        onClick={() => handleCopyToken()}
                         className="mt-4 inline-flex items-center gap-2 rounded-lg border border-line px-4 py-2 text-sm text-ink transition hover:bg-hover"
                       >
                         <Copy size={16} />
@@ -719,6 +716,8 @@ export default function TenantDetails() {
                           ? "Copied"
                           : "Copy Token"}
                       </button>
+                      {reissuedInvitation.invitation.activationLink&&<button type="button" className="control ml-2"
+                        onClick={()=>handleCopyToken(reissuedInvitation.invitation.activationLink)}>Copy Activation Link</button>}
 
                       <Link
                         to="/accept-invitation"
@@ -727,12 +726,6 @@ export default function TenantDetails() {
                         Open Acceptance Page
                       </Link>
                     </>
-                  ) : (
-                    <p className="mt-4 text-sm text-caution">
-                      Invitation delivery is pending.
-                      No development token was returned
-                      by the backend.
-                    </p>
                   )}
                 </div>
               )}

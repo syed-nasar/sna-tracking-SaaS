@@ -50,6 +50,14 @@ router.post("/accept", async (req, res) => {
     client = await pool.connect();
     await client.query("BEGIN");
 
+    // Reissue and acceptance acquire the tenant lock before invitation rows.
+    const lookup = await client.query(
+      "SELECT tenant_id FROM user_invitations WHERE token_hash=$1",
+      [tokenHash]
+    );
+    if (lookup.rowCount) {
+      await client.query("SELECT id FROM tenants WHERE id=$1 FOR UPDATE", [lookup.rows[0].tenant_id]);
+    }
     const invitationResult = await client.query(
       `SELECT
          i.id,
@@ -146,6 +154,10 @@ router.post("/accept", async (req, res) => {
          AND used_at IS NULL`,
       [invitation.user_id, invitation.tenant_id]
     );
+    await client.query(`UPDATE company_invitation_email d
+      SET status='cancelled',payload=NULL,updated_at=clock_timestamp()
+      FROM user_invitations i WHERE i.id=d.invitation_id AND i.user_id=$1
+        AND i.tenant_id=$2 AND d.status='pending'`,[invitation.user_id,invitation.tenant_id]);
 
     await client.query("COMMIT");
 

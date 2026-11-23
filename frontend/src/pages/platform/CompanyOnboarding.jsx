@@ -1,6 +1,8 @@
 
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import InvitationDelivery from "./InvitationDelivery";
+import useInvitationStatus from "./useInvitationStatus";
 import {
   ArrowLeft,
   ArrowRight,
@@ -79,6 +81,7 @@ export default function CompanyOnboarding() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const invitationStatus = useInvitationStatus(result?.tenant?.id);
   const [copied, setCopied] = useState(false);
 
   const isPersonal = form.customer_type === "personal";
@@ -175,9 +178,9 @@ export default function CompanyOnboarding() {
     }
   };
 
-  const copyInvitationToken = async () => {
+  const copyInvitationToken = async (value) => {
     const token =
-      result?.invitation?.developmentToken;
+      value ?? result?.invitation?.manualToken ?? result?.invitation?.developmentToken;
 
     if (!token) return;
 
@@ -193,7 +196,7 @@ export default function CompanyOnboarding() {
 
   if (result) {
     const token =
-      result.invitation?.developmentToken;
+      result.invitation?.manualToken ?? result.invitation?.developmentToken;
 
     const createdPersonal =
       result.tenant.customer_type === "personal";
@@ -280,16 +283,15 @@ export default function CompanyOnboarding() {
               </div>
             </div>
 
-            {token ? (
+            <InvitationDelivery invitation={invitationStatus?.invitation ?? result.invitation} error={invitationStatus?.error} />
+            {token && invitationStatus?.invitation?.state!=="closed" && (
               <div className="mt-6 rounded-panel border border-caution-line bg-caution-soft p-6">
                 <h2 className="font-semibold text-caution">
-                  Development Invitation Token
+                  Manual Invitation
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-muted">
-                  This token is shown only for local
-                  development. Treat it like a password.
-                  Do not publish it or include it in logs.
+                  Share this one-time token or link privately with the administrator.
                 </p>
 
                 <div className="mt-4 break-all rounded-xl border border-line bg-canvas p-4 font-mono text-xs text-secondary">
@@ -298,7 +300,7 @@ export default function CompanyOnboarding() {
 
                 <button
                   type="button"
-                  onClick={copyInvitationToken}
+                  onClick={() => copyInvitationToken()}
                   className="mt-4 inline-flex items-center gap-2 rounded-xl border border-line bg-hover px-4 py-3 text-sm font-medium transition hover:bg-hover"
                 >
                   <Copy size={16} />
@@ -307,16 +309,8 @@ export default function CompanyOnboarding() {
                     : "Copy Invitation Token"}
                 </button>
 
-                <p className="mt-4 text-xs leading-5 text-caution">
-                  Invitation delivery is not automated yet.
-                  Save this token securely for the
-                  invitation acceptance test.
-                </p>
-              </div>
-            ) : (
-              <div className="mt-6 rounded-xl border border-caution-line bg-caution-soft p-5 text-sm text-caution">
-                Invitation created, but no development
-                token was returned. Delivery is pending.
+                {result.invitation.activationLink&&<button type="button" className="control ml-2"
+                  onClick={()=>copyInvitationToken(result.invitation.activationLink)}>Copy Activation Link</button>}
               </div>
             )}
 

@@ -3,6 +3,7 @@ const express = require("express");
 const crypto = require("node:crypto");
 const bcrypt = require("bcryptjs");
 const pool = require("../config/db");
+const { queueInvitation, manualInvitation } = require("../services/company-invitation-email");
 
 const {
   requirePlatformAuth,
@@ -204,6 +205,7 @@ router.post("/", async (req, res) => {
     );
 
     const invitation = invitationResult.rows[0];
+    const deliveryStatus = await queueInvitation(client, invitation.id, invitationToken, customer_type === "business");
 
     await client.query(
       `INSERT INTO platform_audit_logs
@@ -237,20 +239,14 @@ router.post("/", async (req, res) => {
       tenant,
       administrator,
       invitation: {
+        id: invitation.id,
         expiresAt: invitation.expires_at,
-        deliveryStatus: "pending",
+        deliveryStatus,
+        ...manualInvitation(invitationToken),
       },
     };
 
-    // Temporary local-development delivery mechanism.
-    // Never enable this in production.
-    if (
-      process.env.NODE_ENV === "development" &&
-      process.env.ALLOW_DEV_INVITATION_TOKEN === "true"
-    ) {
-      response.invitation.developmentToken =
-        invitationToken;
-    }
+    res.set("Cache-Control", "no-store");
 
     return res.status(201).json(response);
   } catch (error) {

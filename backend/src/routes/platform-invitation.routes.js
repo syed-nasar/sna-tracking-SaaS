@@ -2,6 +2,7 @@
 const express = require("express");
 const crypto = require("node:crypto");
 const pool = require("../config/db");
+const { configStatus, queueInvitation, manualInvitation } = require("../services/company-invitation-email");
 const {
   requirePlatformAuth,
 } = require("../middleware/platform-auth.middleware");
@@ -24,6 +25,34 @@ function parseId(value) {
     return null;
   }
 }
+
+const latestInvitation = `SELECT i.id,i.expires_at,i.used_at,
+  i.created_at>clock_timestamp()-interval '60 seconds' AS recently_issued,
+  u.id AS user_id,u.is_active,u.role,t.status AS tenant_status,t.customer_type,d.status AS delivery_status
+  FROM user_invitations i JOIN users u ON u.id=i.user_id AND u.tenant_id=i.tenant_id
+  JOIN tenants t ON t.id=i.tenant_id LEFT JOIN company_invitation_email d ON d.invitation_id=i.id
+  WHERE i.tenant_id=$1 AND i.user_id=(SELECT user_id FROM user_invitations WHERE tenant_id=$1 ORDER BY id LIMIT 1)
+  ORDER BY i.id DESC LIMIT 1`;
+
+function summarize(row) {
+  const availability = row.customer_type === "business" ? configStatus() : "manual";
+  return {
+    id:row.id,
+    expiresAt:row.expires_at,
+    state:row.is_active || row.used_at ? "closed" : row.expires_at.getTime()<=Date.now() ? "expired" : "open",
+    deliveryStatus:row.delivery_status ?? (availability==="ready"?"manual":availability),
+    emailAvailability:availability,
+    canResend:row.tenant_status==="active" && row.role==="tenant_admin" && !row.is_active && !row.used_at,
+  };
+}
+
+router.get("/:tenantId/invitations/status",async(req,res)=>{
+  const tenantId = parseId(req.params.tenantId);
+  if (!tenantId) return res.status(400).json({message:"Invalid tenant ID"});
+  const {rows:[row]} = await pool.query(latestInvitation,[tenantId]);
+  res.set("Cache-Control","no-store");
+  return res.json({invitation:row ? summarize(row) : null});
+});
 
 // POST /api/platform/tenants/:tenantId/invitations/reissue
 router.post(
@@ -52,7 +81,7 @@ router.post(
 
       // Lock the tenant to serialize invitation reissues.
       const tenantResult = await client.query(
-        `SELECT id, name, slug, status
+        `SELECT id, name, slug, status, customer_type
          FROM tenants
          WHERE id = $1
          FOR UPDATE`,
@@ -77,16 +106,36 @@ router.post(
         });
       }
 
-      // Only reissue for the initial inactive administrator.
+      const {rows:[candidate]} = await client.query(latestInvitation,[tenantId]);
+      if (candidate) await client.query("SELECT invitation_id FROM company_invitation_email WHERE invitation_id=$1 FOR UPDATE",[candidate.id]);
+      const {rows:[latest]} = await client.query(latestInvitation,[tenantId]);
+      if (!latest || latest.used_at || latest.is_active || latest.role!=="tenant_admin") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({message:"No open initial administrator invitation"});
+      }
+      const unexpired = latest.expires_at.getTime()>Date.now();
+      if (unexpired && ["pending","sending"].includes(latest.delivery_status) &&
+          (latest.delivery_status==="sending" || configStatus()==="ready")) {
+        await client.query("COMMIT");
+        res.set("Cache-Control","no-store");
+        return res.status(202).json({message:"Invitation email is already queued",invitation:summarize(latest)});
+      }
+      if (unexpired && latest.recently_issued) {
+        await client.query("ROLLBACK");
+        res.set("Retry-After","60");
+        return res.status(429).json({message:"Wait one minute between invitation reissues."});
+      }
+
+      // Only reissue for the original inactive administrator.
       const adminResult = await client.query(
         `SELECT id, email, role, is_active
          FROM users
          WHERE tenant_id = $1
-           AND role = 'tenant_admin'
+           AND id = $2 AND role = 'tenant_admin'
            AND is_active = false
          ORDER BY id
          FOR UPDATE`,
-        [tenantId]
+        [tenantId,latest.user_id]
       );
 
       if (adminResult.rows.length !== 1) {
@@ -99,6 +148,9 @@ router.post(
       }
 
       const administrator = adminResult.rows[0];
+
+      await client.query(`UPDATE company_invitation_email SET status='cancelled',payload=NULL,
+        updated_at=clock_timestamp() WHERE invitation_id=$1 AND status='pending'`,[latest.id]);
 
       // Invalidate all previous unused invitations
       // for this administrator.
@@ -137,6 +189,7 @@ router.post(
       );
 
       const invitation = invitationResult.rows[0];
+      const deliveryStatus = await queueInvitation(client,invitation.id,token,tenant.customer_type==="business");
 
       await client.query(
         `INSERT INTO platform_audit_logs
@@ -177,18 +230,12 @@ router.post(
         invitation: {
           id: invitation.id,
           expiresAt: invitation.expires_at,
-          deliveryStatus: "pending",
+          deliveryStatus,
+          ...manualInvitation(token),
         },
       };
 
-      // Local development only.
-      if (
-        process.env.NODE_ENV === "development" &&
-        process.env.ALLOW_DEV_INVITATION_TOKEN === "true"
-      ) {
-        response.invitation.developmentToken = token;
-      }
-
+      res.set("Cache-Control","no-store");
       return res.status(201).json(response);
     } catch (error) {
       if (client) {

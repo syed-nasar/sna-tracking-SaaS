@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -21,11 +21,17 @@ const inputClass =
 export default function InvitationAcceptance() {
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({
-    token: "",
+  const [form, setForm] = useState(() => ({
+    token: new URLSearchParams(window.location.hash.slice(1)).get("token") ?? "",
     password: "",
     confirmPassword: "",
-  });
+  }));
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.hash.slice(1)).has("token")) {
+      window.history.replaceState(window.history.state,"",window.location.pathname+window.location.search);
+    }
+  },[]);
 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
