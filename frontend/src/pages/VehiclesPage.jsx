@@ -25,6 +25,7 @@ import TenantLayout from "../components/TenantLayout";
 import FleetGroupFilter from "../components/FleetGroupFilter";
 import VehicleOperations from "../components/VehicleOperations";
 import VehicleGpsInstallation from "../components/VehicleGpsInstallation";
+import { Modal, PageHeader } from "../components/WorkspaceUi";
 import { useAuth } from "../context/AuthContext";
 import { tenantApi } from "../services/api";
 
@@ -40,7 +41,7 @@ const EMPTY_FORM = {
 };
 
 const inputClass =
-  "w-full rounded-xl border border-white/10 bg-[#0b1220] px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-blue-500";
+  "w-full rounded-xl border border-line bg-field px-4 py-3 text-sm text-ink outline-none placeholder:text-subtle focus:border-accent-line";
 
 function getErrorMessage(error, fallback) {
   return (
@@ -53,18 +54,18 @@ function getErrorMessage(error, fallback) {
 function StatusBadge({ value, type = "vehicle" }) {
   const status = String(value || "unknown").toLowerCase();
 
-  let style = "bg-slate-500/10 text-slate-400";
+  let style = "bg-hover text-muted";
 
   if (status === "active" || status === "online") {
-    style = "bg-emerald-500/10 text-emerald-400";
+    style = "bg-positive-soft text-positive";
   } else if (
     status === "offline" ||
     status === "inactive"
   ) {
     style =
       type === "gps"
-        ? "bg-amber-500/10 text-amber-400"
-        : "bg-slate-500/10 text-slate-400";
+        ? "bg-caution-soft text-caution"
+        : "bg-hover text-muted";
   }
 
   return (
@@ -83,10 +84,10 @@ function FormField({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium text-slate-300">
+      <span className="mb-2 block text-sm font-medium text-secondary">
         {label}
         {required && (
-          <span className="ml-1 text-red-400">*</span>
+          <span className="ml-1 text-negative">*</span>
         )}
       </span>
       {children}
@@ -148,7 +149,7 @@ function VehicleImage({
   if (!imageUrl || !source) {
     return (
       <div
-        className={`flex items-center justify-center bg-blue-500/10 text-blue-400 ${className}`}
+        className={`flex items-center justify-center bg-accent-soft text-accent ${className}`}
       >
         <Truck size={24} />
       </div>
@@ -213,6 +214,8 @@ export default function VehiclesPage() {
   const [success, setSuccess] = useState("");
 
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("default");
+  const [vehiclePage, setVehiclePage] = useState(0);
   const [groupFilter, setGroupFilter] = useState("");
   const [operationsId, setOperationsId] = useState(null);
   const [installationVehicle, setInstallationVehicle] = useState(null);
@@ -289,7 +292,7 @@ export default function VehiclesPage() {
   const filteredVehicles = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return vehicles.filter((vehicle) =>
+    const matches = vehicles.filter((vehicle) =>
       (!activeGroup || (vehicle.groupId ?? "ungrouped") === activeGroup) &&
       (!query || [
         vehicle.name,
@@ -307,7 +310,13 @@ export default function VehiclesPage() {
           .includes(query)
       ))
     );
-  }, [vehicles, search, activeGroup]);
+    if (sort === "name") matches.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    if (sort === "status") matches.sort((a, b) => (a.gpsStatus ?? "").localeCompare(b.gpsStatus ?? ""));
+    return matches;
+  }, [vehicles, search, activeGroup, sort]);
+  const pageSize = 15;
+  const currentPage = Math.min(vehiclePage, Math.max(0, Math.ceil(filteredVehicles.length / pageSize) - 1));
+  const displayedVehicles = filteredVehicles.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
 
   const loadAvailableDevices = async () => {
     setDevicesLoading(true);
@@ -595,31 +604,17 @@ export default function VehiclesPage() {
 
   return (
     <TenantLayout title={labels.layoutTitle}>
-      <main className="mx-auto max-w-7xl px-5 py-9 sm:px-8">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
-          <div>
-            <p className="mb-2 text-sm font-semibold text-blue-400">
-              {labels.eyebrow}
-            </p>
-
-            <h2 className="text-3xl font-bold tracking-tight">
-              {labels.heading}
-            </h2>
-
-            <p className="mt-3 text-sm text-slate-400">
-              {labels.description}
-            </p>
-          </div>
-
+      <main className="mx-auto max-w-screen-2xl px-4 py-5 sm:px-7 sm:py-7">
+        <PageHeader title={labels.heading} description={labels.description}>
           <div className="flex flex-wrap items-center gap-3">
-            <Link to="/devices" className="rounded-xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-slate-300">
+            <Link to="/devices" className="rounded-xl border border-line bg-panel px-4 py-3 text-sm text-secondary">
               Device connectivity
             </Link>
             <button
               type="button"
               onClick={loadVehicles}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#111827] px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-line bg-panel px-4 py-3 text-sm font-medium text-secondary transition hover:bg-hover disabled:opacity-50"
             >
               <RefreshCw
                 size={17}
@@ -634,19 +629,19 @@ export default function VehiclesPage() {
               <button
                 type="button"
                 onClick={openAddModal}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold transition hover:bg-blue-500"
+                className="inline-flex items-center gap-2 rounded-xl bg-action px-4 py-3 text-sm font-semibold transition hover:bg-action-hover"
               >
                 <Plus size={18} />
                 Add Vehicle
               </button>
             )}
           </div>
-        </div>
+        </PageHeader>
 
         {success && (
           <div
             role="status"
-            className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-400"
+            className="mb-6 flex items-center gap-3 rounded-xl border border-positive-line bg-positive-soft p-4 text-sm text-positive"
           >
             <Check size={18} />
             {success}
@@ -656,42 +651,47 @@ export default function VehiclesPage() {
         {error && (
           <div
             role="alert"
-            className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400"
+            className="mb-6 flex items-center gap-3 rounded-xl border border-negative-line bg-negative-soft p-4 text-sm text-negative"
           >
             <CircleAlert size={18} />
             {error}
           </div>
         )}
 
-        <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#111827]">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 p-6">
+        <section className="overflow-hidden rounded-panel border border-line bg-panel shadow-panel">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line p-6">
             <div>
               <h3 className="text-lg font-bold">
                 {labels.directoryTitle}
               </h3>
 
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-subtle">
                 {vehicles.length} registered vehicles
               </p>
             </div>
 
             {isBusiness && (
               <div className="w-full sm:w-52">
-                <FleetGroupFilter vehicles={vehicles} value={activeGroup} onChange={setGroupFilter} />
+                <FleetGroupFilter vehicles={vehicles} value={activeGroup} onChange={(value) => { setGroupFilter(value); setVehiclePage(0); }} />
               </div>
             )}
+            <label className="w-full sm:w-40">
+              <span className="sr-only">Sort vehicles</span>
+              <select className="field-control" value={sort} onChange={(event) => { setSort(event.target.value); setVehiclePage(0); }}>
+                <option value="default">Default order</option><option value="name">Name A–Z</option><option value="status">GPS status</option>
+              </select>
+            </label>
             <div className="relative w-full sm:w-72">
               <Search
                 size={17}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-subtle"
               />
 
               <input
                 type="search"
                 value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
+                onChange={(event) => { setSearch(event.target.value); setVehiclePage(0); }}
+                aria-label="Search vehicles"
                 placeholder={labels.searchPlaceholder}
                 className={`${inputClass} pl-10`}
               />
@@ -699,7 +699,7 @@ export default function VehiclesPage() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center gap-3 py-20 text-slate-400">
+            <div className="flex items-center justify-center gap-3 py-20 text-muted">
               <LoaderCircle
                 size={22}
                 className="animate-spin"
@@ -707,7 +707,7 @@ export default function VehiclesPage() {
               Loading vehicles...
             </div>
           ) : error ? (
-            <div className="py-20 text-center text-sm text-slate-500">
+            <div className="py-20 text-center text-sm text-subtle">
               Unable to display vehicles.
               Try refreshing.
             </div>
@@ -715,10 +715,10 @@ export default function VehiclesPage() {
             <div className="flex flex-col items-center gap-3 py-20 text-center">
               <Truck
                 size={35}
-                className="text-slate-600"
+                className="text-subtle"
               />
 
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-muted">
                 {activeGroup
                   ? "No vehicles match your filters."
                   : search ? "No vehicles match your search." : labels.emptyMessage}
@@ -727,7 +727,7 @@ export default function VehiclesPage() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-left">
-                <thead className="bg-white/[0.025] text-xs uppercase tracking-wider text-slate-500">
+                <thead className="bg-hover text-xs uppercase tracking-wider text-subtle">
                   <tr>
                     {[
                       "Vehicle",
@@ -748,10 +748,10 @@ export default function VehiclesPage() {
                 </thead>
 
                 <tbody>
-                  {filteredVehicles.map((vehicle) => (
+                  {displayedVehicles.map((vehicle) => (
                     <tr
                       key={vehicle.id}
-                      className="border-t border-white/5 transition hover:bg-white/[0.025]"
+                      className="border-t border-line transition hover:bg-hover"
                     >
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3">
@@ -767,12 +767,12 @@ export default function VehiclesPage() {
                                 `Vehicle ${vehicle.id}`}
                             </p>
                             {isBusiness && (vehicle.groupName || vehicle.driverName) && (
-                              <p className="mt-1 text-xs text-slate-400">
+                              <p className="mt-1 text-xs text-muted">
                                 {[vehicle.groupName, vehicle.driverName].filter(Boolean).join(" · ")}
                               </p>
                             )}
 
-                            <p className="mt-1 text-xs text-slate-500">
+                            <p className="mt-1 text-xs text-subtle">
                               {[
                                 vehicle.make,
                                 vehicle.model,
@@ -785,12 +785,12 @@ export default function VehiclesPage() {
                         </div>
                       </td>
 
-                      <td className="px-6 py-5 text-sm text-slate-400">
+                      <td className="px-6 py-5 text-sm text-muted">
                         {vehicle.registrationNumber ||
                           "—"}
                       </td>
 
-                      <td className="px-6 py-5 text-sm text-slate-400">
+                      <td className="px-6 py-5 text-sm text-muted">
                         {vehicle.traccarDeviceId ? `#${vehicle.traccarDeviceId}` : "Not installed"}
                       </td>
 
@@ -811,14 +811,14 @@ export default function VehiclesPage() {
                         {canManage && (
                           <button type="button" onClick={() => setInstallationVehicle(vehicle)}
                             aria-label={`GPS device for ${vehicle.name}`}
-                            className="mr-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/10">
+                            className="mr-2 rounded-lg border border-line px-3 py-2 text-xs text-secondary hover:bg-hover">
                             GPS device
                           </button>
                         )}
                         {isBusiness && (
                           <button type="button" onClick={() => setOperationsId(vehicle.id)}
                             aria-label={`Operations for ${vehicle.name}`}
-                            className="mr-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/10">
+                            className="mr-2 rounded-lg border border-line px-3 py-2 text-xs text-secondary hover:bg-hover">
                             Operations
                           </button>
                         )}
@@ -828,13 +828,13 @@ export default function VehiclesPage() {
                             onClick={() =>
                               openEditModal(vehicle)
                             }
-                            className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:bg-white/10"
+                            className="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-xs text-secondary transition hover:bg-hover"
                           >
                             <Pencil size={14} />
                             Edit
                           </button>
                         ) : !isBusiness && (
-                          <span className="text-xs text-slate-600">
+                          <span className="text-xs text-subtle">
                             View only
                           </span>
                         )}
@@ -846,27 +846,20 @@ export default function VehiclesPage() {
             </div>
           )}
 
-          <div className="border-t border-white/10 px-6 py-4 text-xs text-slate-500">
-            Showing{" "}
-            {error ? 0 : filteredVehicles.length}{" "}
-            of {error ? 0 : vehicles.length}{" "}
-            vehicles
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 text-xs text-subtle">
+            <p>Showing {error ? 0 : displayedVehicles.length} of {error ? 0 : filteredVehicles.length} matching vehicles</p>
+            {filteredVehicles.length > pageSize && <div className="flex flex-wrap gap-2">
+              <button type="button" className="control" disabled={currentPage === 0} onClick={() => setVehiclePage(currentPage - 1)}>Previous</button>
+              <button type="button" className="control" disabled={(currentPage + 1) * pageSize >= filteredVehicles.length}
+                onClick={() => setVehiclePage(currentPage + 1)}>Next</button>
+            </div>}
           </div>
         </section>
       </main>
 
       {modalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-4"
-          role="presentation"
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="vehicle-modal-title"
-            className="my-auto w-full max-w-xl rounded-2xl border border-white/10 bg-[#111827] shadow-2xl"
-          >
-            <div className="flex items-center justify-between border-b border-white/10 p-6">
+        <Modal labelId="vehicle-modal-title" onClose={closeModal} busy={saving || removingImage}>
+            <div className="flex items-center justify-between border-b border-line p-6">
               <div>
                 <h3
                   id="vehicle-modal-title"
@@ -877,7 +870,7 @@ export default function VehiclesPage() {
                     : "Add Vehicle"}
                 </h3>
 
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-subtle">
                   {editingVehicle
                     ? "Update vehicle information and image."
                     : "Register a vehicle using an allocated GPS device."}
@@ -889,7 +882,7 @@ export default function VehiclesPage() {
                 onClick={closeModal}
                 disabled={saving || removingImage}
                 aria-label="Close form"
-                className="text-slate-400 hover:text-white disabled:opacity-50"
+                className="text-muted hover:text-ink disabled:opacity-50"
               >
                 <X size={22} />
               </button>
@@ -902,7 +895,7 @@ export default function VehiclesPage() {
               {formError && (
                 <div
                   role="alert"
-                  className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400"
+                  className="rounded-xl border border-negative-line bg-negative-soft p-3 text-sm text-negative"
                 >
                   {formError}
                 </div>
@@ -1041,7 +1034,7 @@ export default function VehiclesPage() {
                   {!devicesLoading &&
                     !formError &&
                     availableDevices.length === 0 && (
-                      <p className="mt-2 text-xs text-amber-400">
+                      <p className="mt-2 text-xs text-caution">
                         {labels.noDevicesMessage}
                       </p>
                     )}
@@ -1049,11 +1042,11 @@ export default function VehiclesPage() {
               )}
 
               {/* Vehicle Image Section */}
-              <div className="rounded-2xl border border-white/10 bg-[#0b1220] p-4">
+              <div className="rounded-panel border border-line bg-field p-4">
                 <div className="mb-4 flex items-center gap-2">
                   <ImagePlus
                     size={19}
-                    className="text-blue-400"
+                    className="text-accent"
                   />
 
                   <h4 className="text-sm font-semibold">
@@ -1061,7 +1054,7 @@ export default function VehiclesPage() {
                   </h4>
                 </div>
 
-                <div className="mb-4 overflow-hidden rounded-xl border border-white/10">
+                <div className="mb-4 overflow-hidden rounded-xl border border-line">
                   {previewUrl ? (
                     <img
                       src={previewUrl}
@@ -1075,7 +1068,7 @@ export default function VehiclesPage() {
                       className="h-44 w-full"
                     />
                   ) : (
-                    <div className="flex h-44 flex-col items-center justify-center gap-3 bg-white/[0.025] text-slate-500">
+                    <div className="flex h-44 flex-col items-center justify-center gap-3 bg-hover text-subtle">
                       <Truck size={40} />
                       <p className="text-xs">
                         No vehicle image selected
@@ -1086,7 +1079,7 @@ export default function VehiclesPage() {
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-slate-400">
+                    <label className="mb-2 block text-xs font-medium text-muted">
                       Image Type
                     </label>
 
@@ -1111,11 +1104,11 @@ export default function VehiclesPage() {
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-slate-400">
+                    <label className="mb-2 block text-xs font-medium text-muted">
                       Upload Image
                     </label>
 
-                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-500/40 bg-blue-500/5 px-4 py-3 text-sm text-blue-400 transition hover:bg-blue-500/10">
+                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-accent-line bg-accent-soft px-4 py-3 text-sm text-accent transition hover:bg-accent-soft">
                       <Upload size={17} />
 
                       {selectedImage
@@ -1134,8 +1127,8 @@ export default function VehiclesPage() {
                 </div>
 
                 {selectedImage && (
-                  <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-2">
-                    <p className="truncate text-xs text-slate-300">
+                  <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-hover px-3 py-2">
+                    <p className="truncate text-xs text-secondary">
                       {selectedImage.name}
                     </p>
 
@@ -1146,7 +1139,7 @@ export default function VehiclesPage() {
                       }
                       disabled={saving}
                       aria-label="Clear selected image"
-                      className="text-slate-400 hover:text-white"
+                      className="text-muted hover:text-ink"
                     >
                       <X size={16} />
                     </button>
@@ -1161,7 +1154,7 @@ export default function VehiclesPage() {
                       disabled={
                         saving || removingImage
                       }
-                      className="mt-3 inline-flex items-center gap-2 text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
+                      className="mt-3 inline-flex items-center gap-2 text-xs text-negative hover:text-negative disabled:opacity-50"
                     >
                       {removingImage ? (
                         <LoaderCircle
@@ -1176,19 +1169,19 @@ export default function VehiclesPage() {
                     </button>
                   )}
 
-                <p className="mt-3 text-xs text-slate-500">
+                <p className="mt-3 text-xs text-subtle">
                   JPG, PNG, or WebP. Maximum 5 MB.
                   Images are accessible only through
                   authenticated vehicle APIs.
                 </p>
               </div>
 
-              <div className="flex justify-end gap-3 border-t border-white/10 pt-5">
+              <div className="flex justify-end gap-3 border-t border-line pt-5">
                 <button
                   type="button"
                   onClick={closeModal}
                   disabled={saving || removingImage}
-                  className="rounded-xl border border-white/10 px-5 py-3 text-sm text-slate-300 hover:bg-white/5 disabled:opacity-50"
+                  className="rounded-xl border border-line px-5 py-3 text-sm text-secondary hover:bg-hover disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -1198,7 +1191,7 @@ export default function VehiclesPage() {
                   disabled={
                     saving || removingImage
                   }
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-xl bg-action px-5 py-3 text-sm font-semibold hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving && (
                     <LoaderCircle
@@ -1215,8 +1208,7 @@ export default function VehiclesPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
       {isBusiness && operationsVehicle && (
         <VehicleOperations key={operationsVehicle.id} vehicle={operationsVehicle} canManage={canManage}

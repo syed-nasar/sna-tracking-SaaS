@@ -16,7 +16,7 @@ import {
 import { platformApi } from "../../services/api";
 
 const inputClass =
-  "w-full rounded-xl border border-white/10 bg-[#0b1220] px-4 py-3 text-sm text-white outline-none transition focus:border-blue-500";
+  "w-full rounded-xl border border-line bg-field px-4 py-3 text-sm text-ink outline-none transition focus:border-accent-line";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -34,8 +34,8 @@ function CustomerTypeBadge({ type }) {
     <span
       className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
         isPersonal
-          ? "bg-violet-500/10 text-violet-400"
-          : "bg-blue-500/10 text-blue-400"
+          ? "bg-special-soft text-special"
+          : "bg-accent-soft text-accent"
       }`}
     >
       <Icon size={14} />
@@ -294,7 +294,7 @@ export default function TenantDetails() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center gap-3 bg-[#090d16] text-slate-400">
+      <div className="flex min-h-screen items-center justify-center gap-3 bg-canvas text-muted">
         <LoaderCircle
           className="animate-spin"
           size={24}
@@ -308,11 +308,11 @@ export default function TenantDetails() {
   const CustomerIcon = isPersonal ? UserRound : Building2;
 
   return (
-    <main className="min-h-screen bg-[#090d16] px-5 py-10 text-white sm:px-8">
+    <main className="min-h-[calc(100dvh-4rem)] bg-canvas px-5 py-10 text-ink sm:px-8">
       <div className="mx-auto max-w-5xl">
         <Link
           to="/platform/dashboard"
-          className="mb-8 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
+          className="mb-8 inline-flex items-center gap-2 text-sm text-muted transition hover:text-ink"
         >
           <ArrowLeft size={17} />
           Back to Dashboard
@@ -321,7 +321,7 @@ export default function TenantDetails() {
         {error && (
           <div
             role="alert"
-            className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400"
+            className="mb-6 rounded-xl border border-negative-line bg-negative-soft p-4 text-sm text-negative"
           >
             {error}
           </div>
@@ -330,14 +330,14 @@ export default function TenantDetails() {
         {success && (
           <div
             role="status"
-            className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-400"
+            className="mb-6 rounded-xl border border-positive-line bg-positive-soft p-4 text-sm text-positive"
           >
             {success}
           </div>
         )}
 
         {!tenant ? (
-          <div className="rounded-2xl border border-white/10 bg-[#111827] p-8 text-slate-400">
+          <div className="rounded-panel border border-line bg-panel p-8 text-muted">
             Customer details unavailable.
           </div>
         ) : (
@@ -345,17 +345,17 @@ export default function TenantDetails() {
             <div className="mb-8 flex flex-wrap items-center justify-between gap-5">
               <div className="flex items-center gap-4">
                 <div
-                  className={`rounded-2xl p-4 ${
+                  className={`rounded-panel p-4 ${
                     isPersonal
-                      ? "bg-violet-500/10 text-violet-400"
-                      : "bg-blue-600/15 text-blue-400"
+                      ? "bg-special-soft text-special"
+                      : "bg-accent-soft text-accent"
                   }`}
                 >
                   <CustomerIcon size={30} />
                 </div>
 
                 <div>
-                  <p className="mb-1 text-sm text-blue-400">
+                  <p className="mb-1 text-sm text-accent">
                     Customer Management
                   </p>
 
@@ -364,7 +364,7 @@ export default function TenantDetails() {
                   </h1>
 
                   <div className="mt-2 flex flex-wrap items-center gap-3">
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-subtle">
                       {tenant.slug}
                     </p>
 
@@ -378,10 +378,10 @@ export default function TenantDetails() {
               <span
                 className={`rounded-full px-4 py-2 text-sm font-semibold capitalize ${
                   tenant.status === "active"
-                    ? "bg-emerald-500/10 text-emerald-400"
+                    ? "bg-positive-soft text-positive"
                     : tenant.status === "suspended"
-                      ? "bg-amber-500/10 text-amber-400"
-                      : "bg-slate-500/10 text-slate-400"
+                      ? "bg-caution-soft text-caution"
+                      : "bg-hover text-muted"
                 }`}
               >
                 {tenant.status}
@@ -389,7 +389,7 @@ export default function TenantDetails() {
             </div>
 
             <div className="grid gap-6 lg:grid-cols-3">
-              <section className="rounded-2xl border border-white/10 bg-[#111827] p-7 lg:col-span-2">
+              <section className="rounded-panel border border-line bg-panel p-7 lg:col-span-2">
                 <h2 className="mb-6 text-lg font-bold">
                   Customer Information
                 </h2>
@@ -401,7 +401,7 @@ export default function TenantDetails() {
                   <div>
                     <label
                       htmlFor="customer-type"
-                      className="mb-2 block text-sm text-slate-300"
+                      className="mb-2 block text-sm text-secondary"
                     >
                       Customer Type
                     </label>
@@ -422,7 +422,7 @@ export default function TenantDetails() {
                       </option>
                     </select>
 
-                    <p className="mt-2 text-xs text-slate-500">
+                    <p className="mt-2 text-xs text-subtle">
                       Changing the customer type does not
                       change the tenant ID or slug.
                     </p>
@@ -431,7 +431,7 @@ export default function TenantDetails() {
                   <div>
                     <label
                       htmlFor="customer-name"
-                      className="mb-2 block text-sm text-slate-300"
+                      className="mb-2 block text-sm text-secondary"
                     >
                       {form.customer_type === "personal"
                         ? "Full Name"
@@ -452,7 +452,7 @@ export default function TenantDetails() {
                   <div>
                     <label
                       htmlFor="customer-email"
-                      className="mb-2 block text-sm text-slate-300"
+                      className="mb-2 block text-sm text-secondary"
                     >
                       Contact Email
                     </label>
@@ -472,7 +472,7 @@ export default function TenantDetails() {
                   <div>
                     <label
                       htmlFor="customer-phone"
-                      className="mb-2 block text-sm text-slate-300"
+                      className="mb-2 block text-sm text-secondary"
                     >
                       Phone Number
                     </label>
@@ -495,7 +495,7 @@ export default function TenantDetails() {
                       updatingStatus ||
                       reissuing
                     }
-                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold transition hover:bg-blue-500 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-xl bg-action px-5 py-3 text-sm font-semibold transition hover:bg-action-hover disabled:opacity-50"
                   >
                     {saving ? (
                       <LoaderCircle
@@ -514,14 +514,14 @@ export default function TenantDetails() {
               </section>
 
               <div className="space-y-6">
-                <section className="rounded-2xl border border-white/10 bg-[#111827] p-6">
+                <section className="rounded-panel border border-line bg-panel p-6">
                   <h2 className="mb-5 font-bold">
                     Customer Details
                   </h2>
 
                   <div className="space-y-5 text-sm">
                     <div>
-                      <p className="mb-1 text-slate-500">
+                      <p className="mb-1 text-subtle">
                         Tenant ID
                       </p>
 
@@ -531,7 +531,7 @@ export default function TenantDetails() {
                     </div>
 
                     <div>
-                      <p className="mb-1 text-slate-500">
+                      <p className="mb-1 text-subtle">
                         Customer Type
                       </p>
 
@@ -541,7 +541,7 @@ export default function TenantDetails() {
                     </div>
 
                     <div>
-                      <p className="mb-1 text-slate-500">
+                      <p className="mb-1 text-subtle">
                         Tenant Slug
                       </p>
 
@@ -551,7 +551,7 @@ export default function TenantDetails() {
                     </div>
 
                     <div>
-                      <p className="mb-1 text-slate-500">
+                      <p className="mb-1 text-subtle">
                         Created
                       </p>
 
@@ -561,7 +561,7 @@ export default function TenantDetails() {
                     </div>
 
                     <div>
-                      <p className="mb-1 text-slate-500">
+                      <p className="mb-1 text-subtle">
                         Last Updated
                       </p>
 
@@ -572,12 +572,12 @@ export default function TenantDetails() {
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-white/10 bg-[#111827] p-6">
+                <section className="rounded-panel border border-line bg-panel p-6">
                   <h2 className="mb-3 font-bold">
                     Account Status
                   </h2>
 
-                  <p className="mb-5 text-sm leading-6 text-slate-400">
+                  <p className="mb-5 text-sm leading-6 text-muted">
                     {tenant.status === "active"
                       ? "This customer currently has access to the platform."
                       : "This customer is not currently active."}
@@ -593,8 +593,8 @@ export default function TenantDetails() {
                     }
                     className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition disabled:opacity-50 ${
                       tenant.status === "active"
-                        ? "border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-                        : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                        ? "border border-caution-line bg-caution-soft text-caution hover:bg-caution-soft"
+                        : "border border-positive-line bg-positive-soft text-positive hover:bg-positive-soft"
                     }`}
                   >
                     {updatingStatus ? (
@@ -616,9 +616,9 @@ export default function TenantDetails() {
               </div>
             </div>
 
-            <section className="mt-6 rounded-2xl border border-white/10 bg-[#111827] p-7">
+            <section className="mt-6 rounded-panel border border-line bg-panel p-7">
               <div className="flex items-start gap-3">
-                <div className="rounded-xl bg-blue-500/10 p-3 text-blue-400">
+                <div className="rounded-xl bg-accent-soft p-3 text-accent">
                   <KeyRound size={22} />
                 </div>
 
@@ -627,7 +627,7 @@ export default function TenantDetails() {
                     Administrator Invitation
                   </h2>
 
-                  <p className="mt-2 text-sm leading-6 text-slate-400">
+                  <p className="mt-2 text-sm leading-6 text-muted">
                     Reissue the invitation for this
                     customer's initial inactive
                     administrator. This invalidates all
@@ -646,7 +646,7 @@ export default function TenantDetails() {
                   updatingStatus ||
                   tenant.status !== "active"
                 }
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-action px-5 py-3 text-sm font-semibold transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {reissuing ? (
                   <LoaderCircle
@@ -662,7 +662,7 @@ export default function TenantDetails() {
                   : "Reissue Invitation"}
               </button>
 
-              <p className="mt-3 text-xs text-slate-500">
+              <p className="mt-3 text-xs text-subtle">
                 Available only while the customer is
                 active and exactly one initial tenant
                 administrator is inactive. Once the
@@ -672,18 +672,18 @@ export default function TenantDetails() {
               </p>
 
               {reissuedInvitation && (
-                <div className="mt-6 rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
-                  <p className="text-sm font-semibold text-amber-400">
+                <div className="mt-6 rounded-xl border border-caution-line bg-caution-soft p-5">
+                  <p className="text-sm font-semibold text-caution">
                     New Invitation Created
                   </p>
 
-                  <p className="mt-2 text-sm text-slate-300">
+                  <p className="mt-2 text-sm text-secondary">
                     Administrator:{" "}
                     {reissuedInvitation.administrator
                       ?.email || "-"}
                   </p>
 
-                  <p className="mt-1 text-sm text-slate-300">
+                  <p className="mt-1 text-sm text-secondary">
                     Expires:{" "}
                     {formatDate(
                       reissuedInvitation.invitation
@@ -694,7 +694,7 @@ export default function TenantDetails() {
                   {reissuedInvitation.invitation
                     ?.developmentToken ? (
                     <>
-                      <p className="mt-4 text-xs leading-5 text-amber-300">
+                      <p className="mt-4 text-xs leading-5 text-caution">
                         Local development token. Copy
                         it now; it cannot be retrieved
                         after leaving this page. Do not
@@ -702,7 +702,7 @@ export default function TenantDetails() {
                         in logs.
                       </p>
 
-                      <div className="mt-3 select-all break-all rounded-lg bg-[#090d16] p-4 font-mono text-xs text-white">
+                      <div className="mt-3 select-all break-all rounded-lg bg-canvas p-4 font-mono text-xs text-ink">
                         {
                           reissuedInvitation.invitation
                             .developmentToken
@@ -712,7 +712,7 @@ export default function TenantDetails() {
                       <button
                         type="button"
                         onClick={handleCopyToken}
-                        className="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/5"
+                        className="mt-4 inline-flex items-center gap-2 rounded-lg border border-line px-4 py-2 text-sm text-ink transition hover:bg-hover"
                       >
                         <Copy size={16} />
                         {copied
@@ -722,13 +722,13 @@ export default function TenantDetails() {
 
                       <Link
                         to="/accept-invitation"
-                        className="ml-3 inline-flex rounded-lg border border-white/10 px-4 py-2 text-sm text-blue-400 transition hover:bg-white/5"
+                        className="ml-3 inline-flex rounded-lg border border-line px-4 py-2 text-sm text-accent transition hover:bg-hover"
                       >
                         Open Acceptance Page
                       </Link>
                     </>
                   ) : (
-                    <p className="mt-4 text-sm text-amber-300">
+                    <p className="mt-4 text-sm text-caution">
                       Invitation delivery is pending.
                       No development token was returned
                       by the backend.

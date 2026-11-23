@@ -15,7 +15,7 @@ import {
 import { platformApi } from "../../services/api";
 
 const inputClass =
-  "w-full rounded-xl border border-white/10 bg-[#0b1220] px-4 py-3 text-sm text-white outline-none transition focus:border-blue-500";
+  "w-full rounded-xl border border-line bg-field px-4 py-3 text-sm text-ink outline-none transition focus:border-accent-line";
 
 const initialForm = {
   customer_type: "business",
@@ -42,11 +42,11 @@ function Field({
     <div>
       <label
         htmlFor={name}
-        className="mb-2 block text-sm font-medium text-slate-300"
+        className="mb-2 block text-sm font-medium text-secondary"
       >
         {label}
         {required && (
-          <span className="ml-1 text-blue-400">*</span>
+          <span className="ml-1 text-accent">*</span>
         )}
       </label>
 
@@ -63,7 +63,7 @@ function Field({
       />
 
       {hint && (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-subtle">
           {hint}
         </p>
       )}
@@ -199,14 +199,14 @@ export default function CompanyOnboarding() {
       result.tenant.customer_type === "personal";
 
     return (
-      <main className="min-h-screen bg-[#090d16] px-5 py-12 text-white sm:px-8">
+      <main className="min-h-[calc(100dvh-4rem)] bg-canvas px-5 py-12 text-ink sm:px-8">
         <div className="mx-auto max-w-2xl">
-          <div className="rounded-3xl border border-white/10 bg-[#111827] p-7 sm:p-10">
-            <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400">
+          <div className="rounded-panel border border-line bg-panel p-7 sm:p-10">
+            <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-panel bg-positive-soft text-positive">
               <CheckCircle2 size={34} />
             </div>
 
-            <p className="mb-2 text-sm font-semibold text-emerald-400">
+            <p className="mb-2 text-sm font-semibold text-positive">
               {createdPersonal
                 ? "Personal Customer Created"
                 : "Business Customer Created"}
@@ -216,15 +216,15 @@ export default function CompanyOnboarding() {
               Onboarding Successful
             </h1>
 
-            <p className="mt-3 text-sm leading-6 text-slate-400">
+            <p className="mt-3 text-sm leading-6 text-muted">
               The customer account and its initial
               administrator have been created
               successfully.
             </p>
 
-            <div className="mt-8 space-y-5 rounded-2xl border border-white/10 bg-[#0b1220] p-6">
+            <div className="mt-8 space-y-5 rounded-panel border border-line bg-field p-6">
               <div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-subtle">
                   Customer Type
                 </p>
                 <p className="mt-1 font-semibold">
@@ -235,7 +235,7 @@ export default function CompanyOnboarding() {
               </div>
 
               <div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-subtle">
                   {createdPersonal
                     ? "Customer Name"
                     : "Company"}
@@ -246,7 +246,7 @@ export default function CompanyOnboarding() {
               </div>
 
               <div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-subtle">
                   Customer Slug
                 </p>
                 <p className="mt-1 font-semibold">
@@ -255,19 +255,19 @@ export default function CompanyOnboarding() {
               </div>
 
               <div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-subtle">
                   Administrator
                 </p>
                 <p className="mt-1 font-semibold">
                   {result.administrator.full_name}
                 </p>
-                <p className="mt-1 text-sm text-slate-400">
+                <p className="mt-1 text-sm text-muted">
                   {result.administrator.email}
                 </p>
               </div>
 
               <div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-subtle">
                   Invitation Expiration
                 </p>
                 <p className="mt-1 text-sm">
@@ -281,25 +281,25 @@ export default function CompanyOnboarding() {
             </div>
 
             {token ? (
-              <div className="mt-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
-                <h2 className="font-semibold text-amber-400">
+              <div className="mt-6 rounded-panel border border-caution-line bg-caution-soft p-6">
+                <h2 className="font-semibold text-caution">
                   Development Invitation Token
                 </h2>
 
-                <p className="mt-2 text-sm leading-6 text-slate-400">
+                <p className="mt-2 text-sm leading-6 text-muted">
                   This token is shown only for local
                   development. Treat it like a password.
                   Do not publish it or include it in logs.
                 </p>
 
-                <div className="mt-4 break-all rounded-xl border border-white/10 bg-[#090d16] p-4 font-mono text-xs text-slate-300">
+                <div className="mt-4 break-all rounded-xl border border-line bg-canvas p-4 font-mono text-xs text-secondary">
                   {token}
                 </div>
 
                 <button
                   type="button"
                   onClick={copyInvitationToken}
-                  className="mt-4 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium transition hover:bg-white/10"
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl border border-line bg-hover px-4 py-3 text-sm font-medium transition hover:bg-hover"
                 >
                   <Copy size={16} />
                   {copied
@@ -307,14 +307,14 @@ export default function CompanyOnboarding() {
                     : "Copy Invitation Token"}
                 </button>
 
-                <p className="mt-4 text-xs leading-5 text-amber-300/80">
+                <p className="mt-4 text-xs leading-5 text-caution">
                   Invitation delivery is not automated yet.
                   Save this token securely for the
                   invitation acceptance test.
                 </p>
               </div>
             ) : (
-              <div className="mt-6 rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-300">
+              <div className="mt-6 rounded-xl border border-caution-line bg-caution-soft p-5 text-sm text-caution">
                 Invitation created, but no development
                 token was returned. Delivery is pending.
               </div>
@@ -323,7 +323,7 @@ export default function CompanyOnboarding() {
             {error && (
               <p
                 role="alert"
-                className="mt-4 text-sm text-red-400"
+                className="mt-4 text-sm text-negative"
               >
                 {error}
               </p>
@@ -337,7 +337,7 @@ export default function CompanyOnboarding() {
                     `/platform/tenants/${result.tenant.id}`
                   )
                 }
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold transition hover:bg-blue-500"
+                className="inline-flex items-center gap-2 rounded-xl bg-action px-5 py-3 text-sm font-semibold transition hover:bg-action-hover"
               >
                 View Customer
                 <ArrowRight size={17} />
@@ -345,7 +345,7 @@ export default function CompanyOnboarding() {
 
               <Link
                 to="/platform/dashboard"
-                className="inline-flex items-center rounded-xl border border-white/10 px-5 py-3 text-sm font-medium text-slate-300 hover:bg-white/5"
+                className="inline-flex items-center rounded-xl border border-line px-5 py-3 text-sm font-medium text-secondary hover:bg-hover"
               >
                 Back to Dashboard
               </Link>
@@ -357,18 +357,18 @@ export default function CompanyOnboarding() {
   }
 
   return (
-    <main className="min-h-screen bg-[#090d16] px-5 py-10 text-white sm:px-8">
+    <main className="min-h-[calc(100dvh-4rem)] bg-canvas px-5 py-10 text-ink sm:px-8">
       <div className="mx-auto max-w-4xl">
         <Link
           to="/platform/dashboard"
-          className="mb-8 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
+          className="mb-8 inline-flex items-center gap-2 text-sm text-muted transition hover:text-ink"
         >
           <ArrowLeft size={17} />
           Back to Dashboard
         </Link>
 
         <div className="mb-9">
-          <p className="mb-2 text-sm font-semibold text-blue-400">
+          <p className="mb-2 text-sm font-semibold text-accent">
             Platform Administration
           </p>
 
@@ -376,7 +376,7 @@ export default function CompanyOnboarding() {
             Onboard New Customer
           </h1>
 
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 text-sm text-muted">
             Register an individual vehicle owner or a
             fleet company and create its first
             administrator.
@@ -386,19 +386,19 @@ export default function CompanyOnboarding() {
         {error && (
           <div
             role="alert"
-            className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400"
+            className="mb-6 rounded-xl border border-negative-line bg-negative-soft p-4 text-sm text-negative"
           >
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <section className="rounded-2xl border border-white/10 bg-[#111827] p-6 sm:p-8">
+          <section className="rounded-panel border border-line bg-panel p-6 sm:p-8">
             <h2 className="text-lg font-bold">
               Customer Type
             </h2>
 
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-subtle">
               Choose the type of customer account.
             </p>
 
@@ -409,10 +409,10 @@ export default function CompanyOnboarding() {
                   selectCustomerType("personal")
                 }
                 aria-pressed={isPersonal}
-                className={`rounded-2xl border p-5 text-left transition ${
+                className={`rounded-panel border p-5 text-left transition ${
                   isPersonal
-                    ? "border-blue-500 bg-blue-500/10"
-                    : "border-white/10 bg-[#0b1220] hover:border-white/25"
+                    ? "border-accent-line bg-accent-soft"
+                    : "border-line bg-field hover:border-line-strong"
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -420,15 +420,15 @@ export default function CompanyOnboarding() {
                     size={25}
                     className={
                       isPersonal
-                        ? "text-blue-400"
-                        : "text-slate-400"
+                        ? "text-accent"
+                        : "text-muted"
                     }
                   />
 
                   {isPersonal && (
                     <CheckCircle2
                       size={20}
-                      className="text-blue-400"
+                      className="text-accent"
                     />
                   )}
                 </div>
@@ -437,7 +437,7 @@ export default function CompanyOnboarding() {
                   Personal
                 </p>
 
-                <p className="mt-2 text-sm text-slate-400">
+                <p className="mt-2 text-sm text-muted">
                   Individual vehicle owners
                 </p>
               </button>
@@ -448,10 +448,10 @@ export default function CompanyOnboarding() {
                   selectCustomerType("business")
                 }
                 aria-pressed={!isPersonal}
-                className={`rounded-2xl border p-5 text-left transition ${
+                className={`rounded-panel border p-5 text-left transition ${
                   !isPersonal
-                    ? "border-blue-500 bg-blue-500/10"
-                    : "border-white/10 bg-[#0b1220] hover:border-white/25"
+                    ? "border-accent-line bg-accent-soft"
+                    : "border-line bg-field hover:border-line-strong"
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -459,15 +459,15 @@ export default function CompanyOnboarding() {
                     size={25}
                     className={
                       !isPersonal
-                        ? "text-blue-400"
-                        : "text-slate-400"
+                        ? "text-accent"
+                        : "text-muted"
                     }
                   />
 
                   {!isPersonal && (
                     <CheckCircle2
                       size={20}
-                      className="text-blue-400"
+                      className="text-accent"
                     />
                   )}
                 </div>
@@ -476,16 +476,16 @@ export default function CompanyOnboarding() {
                   Business
                 </p>
 
-                <p className="mt-2 text-sm text-slate-400">
+                <p className="mt-2 text-sm text-muted">
                   Companies and fleet operators
                 </p>
               </button>
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-[#111827] p-6 sm:p-8">
+          <section className="rounded-panel border border-line bg-panel p-6 sm:p-8">
             <div className="mb-7 flex items-center gap-3">
-              <div className="rounded-xl bg-blue-500/10 p-3 text-blue-400">
+              <div className="rounded-xl bg-accent-soft p-3 text-accent">
                 {isPersonal ? (
                   <UserRound size={22} />
                 ) : (
@@ -499,7 +499,7 @@ export default function CompanyOnboarding() {
                     ? "Personal Information"
                     : "Company Information"}
                 </h2>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-subtle">
                   {isPersonal
                     ? "Individual customer details"
                     : "Fleet operator details"}
@@ -570,9 +570,9 @@ export default function CompanyOnboarding() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-[#111827] p-6 sm:p-8">
+          <section className="rounded-panel border border-line bg-panel p-6 sm:p-8">
             <div className="mb-7 flex items-center gap-3">
-              <div className="rounded-xl bg-blue-500/10 p-3 text-blue-400">
+              <div className="rounded-xl bg-accent-soft p-3 text-accent">
                 <UserRound size={22} />
               </div>
 
@@ -580,7 +580,7 @@ export default function CompanyOnboarding() {
                 <h2 className="text-lg font-bold">
                   Initial Administrator
                 </h2>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-subtle">
                   {isPersonal
                     ? "Personal account administrator"
                     : "First tenant administrator account"}
@@ -611,13 +611,13 @@ export default function CompanyOnboarding() {
               />
             </div>
 
-            <div className="mt-7 flex gap-3 rounded-xl border border-blue-500/15 bg-blue-500/5 p-4">
+            <div className="mt-7 flex gap-3 rounded-xl border border-accent-line bg-accent-soft p-4">
               <ShieldCheck
                 size={20}
-                className="shrink-0 text-blue-400"
+                className="shrink-0 text-accent"
               />
 
-              <p className="text-sm leading-6 text-slate-400">
+              <p className="text-sm leading-6 text-muted">
                 The administrator account will remain
                 inactive until its invitation is accepted
                 and a password is configured.
@@ -626,14 +626,14 @@ export default function CompanyOnboarding() {
           </section>
 
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-subtle">
               Fields marked * are required.
             </p>
 
             <button
               type="submit"
               disabled={submitting}
-              className="inline-flex items-center gap-3 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-semibold transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-3 rounded-xl bg-action px-6 py-3.5 text-sm font-semibold transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? (
                 <LoaderCircle

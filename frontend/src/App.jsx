@@ -5,14 +5,16 @@ import {
   Route,
   Routes,
 } from "react-router-dom";
+import { lazy, Suspense } from "react";
 
 import { useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import PlatformLayout from "./components/PlatformLayout";
+import { StateNotice } from "./components/WorkspaceUi";
 
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import VehiclesPage from "./pages/VehiclesPage";
-import LiveTrackingPage from "./pages/LiveTrackingPage";
 import AccountPage from "./pages/AccountPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import FleetOperationsPage from "./pages/FleetOperationsPage";
@@ -22,11 +24,19 @@ import PlatformDashboard from "./pages/platform/PlatformDashboard";
 import TenantDetails from "./pages/platform/TenantDetails";
 import CompanyOnboarding from "./pages/platform/CompanyOnboarding";
 import InvitationAcceptance from "./pages/InvitationAcceptance";
-import DeviceInventoryPage from "./pages/platform/DeviceInventoryPage";
-import SimConnectivityPage from "./pages/platform/SimConnectivityPage";
-import BillingPage from "./pages/billing/BillingPage";
 import CustomerBillingPage from "./pages/billing/CustomerBillingPage";
 import { PrintableInvoice } from "./pages/billing/BillingInvoices";
+
+const LiveTrackingPage = lazy(() => import("./pages/LiveTrackingPage"));
+const DeviceInventoryPage = lazy(() => import("./pages/platform/DeviceInventoryPage"));
+const SimConnectivityPage = lazy(() => import("./pages/platform/SimConnectivityPage"));
+const BillingPage = lazy(() => import("./pages/billing/BillingPage"));
+
+function DeferredPage({ children }) {
+  return <Suspense fallback={<main className="p-4 sm:p-7"><StateNotice loading>Loading page…</StateNotice></main>}>
+    {children}
+  </Suspense>;
+}
 
 function HomeRedirect() {
   const { session } = useAuth();
@@ -77,7 +87,7 @@ export default function App() {
 
           <Route
             path="/tracking"
-            element={<LiveTrackingPage />}
+            element={<DeferredPage><LiveTrackingPage /></DeferredPage>}
           />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/users" element={<UserManagementPage />} />
@@ -89,24 +99,15 @@ export default function App() {
 
         {/* Platform Admin routes */}
         <Route element={<ProtectedRoute type="platform" />}>
-          <Route path="/platform/devices" element={<DeviceInventoryPage />} />
-          <Route path="/platform/connectivity" element={<SimConnectivityPage />} />
-          <Route path="/platform/billing" element={<BillingPage />} />
           <Route path="/platform/billing/invoices/:id/print" element={<PrintableInvoice platform />} />
-          <Route
-            path="/platform/dashboard"
-            element={<PlatformDashboard />}
-          />
-
-          <Route
-            path="/platform/tenants/new"
-            element={<CompanyOnboarding />}
-          />
-
-          <Route
-            path="/platform/tenants/:id"
-            element={<TenantDetails />}
-          />
+          <Route element={<PlatformLayout />}>
+            <Route path="/platform/devices" element={<DeferredPage><DeviceInventoryPage /></DeferredPage>} />
+            <Route path="/platform/connectivity" element={<DeferredPage><SimConnectivityPage /></DeferredPage>} />
+            <Route path="/platform/billing" element={<DeferredPage><BillingPage /></DeferredPage>} />
+            <Route path="/platform/dashboard" element={<PlatformDashboard />} />
+            <Route path="/platform/tenants/new" element={<CompanyOnboarding />} />
+            <Route path="/platform/tenants/:id" element={<TenantDetails />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<HomeRedirect />} />

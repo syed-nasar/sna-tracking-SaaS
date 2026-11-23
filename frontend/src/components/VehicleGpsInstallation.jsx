@@ -40,23 +40,23 @@ export default function VehicleGpsInstallation({ vehicle, onClose, onSaved }) {
     }
   }
 
-  const button = "rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-50";
+  const button = "rounded-lg border border-line-strong px-3 py-2 text-sm disabled:opacity-50";
   return (
     <dialog ref={dialog} onClose={onClose} onCancel={(event) => { if (busy) event.preventDefault(); }}
       aria-labelledby="gps-installation-title"
-      className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg space-y-4 overflow-y-auto rounded-xl border border-white/15 bg-[#111827] p-5 text-white backdrop:bg-black/70">
+      className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg space-y-4 overflow-y-auto rounded-xl border border-line-strong bg-panel p-5 text-ink backdrop:bg-black/70">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <h2 id="gps-installation-title" className="break-words text-lg font-semibold">GPS device for {vehicle.name}</h2>
         <button type="button" className={button} disabled={busy} onClick={onClose}>Close</button>
       </header>
-      <p className="text-sm text-slate-300">{attached ? `Installed device #${attached}` : "No GPS device installed."}</p>
-      {error && <p role="alert" className="text-red-300">{error}</p>}
+      <p className="text-sm text-secondary">{attached ? `Installed device #${attached}` : "No GPS device installed."}</p>
+      {error && <p role="alert" className="text-negative">{error}</p>}
       {!devices && !error && <p role="status">Loading allocated devices…</p>}
-      {options?.length === 0 && <p className="text-sm text-slate-400">There are no other linked devices available on this account.</p>}
+      {options?.length === 0 && <p className="text-sm text-muted">There are no other linked devices available on this account.</p>}
       {options?.length > 0 && (
         <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <label className="block space-y-1">Choose GPS device
-            <select className="w-full rounded-lg border border-white/15 bg-[#090d16] px-3 py-2" disabled={busy}
+            <select className="w-full rounded-lg border border-line-strong bg-canvas px-3 py-2" disabled={busy}
               value={selected} onChange={(event) => setSelected(event.target.value)} required>
               <option value="">Select device</option>
               {options.map((device) => (
@@ -67,7 +67,7 @@ export default function VehicleGpsInstallation({ vehicle, onClose, onSaved }) {
               ))}
             </select>
           </label>
-          {chosen?.vehicleName && <p className="break-words text-sm text-amber-300">This will remove the tracker from {chosen.vehicleName}.</p>}
+          {chosen?.vehicleName && <p className="break-words text-sm text-caution">This will remove the tracker from {chosen.vehicleName}.</p>}
           <button className={button} disabled={busy || !chosen}>{attached ? "Replace GPS device" : "Install GPS device"}</button>
         </form>
       )}

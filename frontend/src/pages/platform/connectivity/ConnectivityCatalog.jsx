@@ -57,9 +57,9 @@ export default function ConnectivityCatalog({ type, onChanged }) {
         <Input name="q" label={`Search ${title.toLowerCase()}`} maxLength={150} />
         <button className={buttonClass}>Search</button>
       </form>
-      {notice && <p role="status" className="text-emerald-300">{notice}</p>}
+      {notice && <p role="status" className="text-positive">{notice}</p>}
       <ReadState data={data} error={listError} empty={data?.data.length === 0} />
-      <ul className="divide-y divide-white/10">
+      <ul className="divide-y divide-line">
         {data?.data.map((entry) => (
           <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
             <span className="break-words">{entry.name} · {entry.isActive ? "Active" : "Inactive"}</span>
@@ -69,7 +69,7 @@ export default function ConnectivityCatalog({ type, onChanged }) {
       </ul>
       <Pagination result={data} offset={filter.offset} onChange={(offset) => setFilter({ ...filter, offset })} />
       {editing !== undefined && (
-        <form key={editing?.id ?? "new"} className="space-y-3 border-t border-white/10 pt-4" onSubmit={save}>
+        <form key={editing?.id ?? "new"} className="space-y-3 border-t border-line pt-4" onSubmit={save}>
           <h3 className="font-semibold">{editing ? "Edit" : "Add"} {operators ? "operator" : "plan"}</h3>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input name="name" label="Name" value={editing?.name} maxLength={150} required />
@@ -94,7 +94,7 @@ export default function ConnectivityCatalog({ type, onChanged }) {
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="isActive" defaultChecked={editing?.isActive ?? true} /> Active</label>
           </div>
           {!operators && <Notes value={editing?.notes} />}
-          {error && <p role="alert" className="text-red-300">{error}</p>}
+          {error && <p role="alert" className="text-negative">{error}</p>}
           <div className="flex flex-wrap gap-2">
             <button className={primaryClass} disabled={busy}>{operators ? "Save operator" : "Save plan"}</button>
             <button type="button" className={buttonClass} disabled={busy} onClick={() => { setEditing(undefined); setError(""); }}>Cancel</button>

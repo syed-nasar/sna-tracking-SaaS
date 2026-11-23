@@ -19,7 +19,7 @@ export default function CustomerBillingPage() {
     <main className="mx-auto max-w-6xl space-y-5 p-4 sm:p-8">
       <h1 className="text-2xl font-bold">{label}</h1>
       {!allowed ? <Panel><p>Only your tenant administrator can view billing records.</p></Panel> : <>
-        <p className="text-sm text-slate-400">Online payments are not integrated. Recorded payments appear in each invoice.</p>
+        <p className="text-sm text-muted">Online payments are not integrated. Recorded payments appear in each invoice.</p>
         <Panel>
           <h2 className="text-lg font-semibold">Subscription</h2>
           <ReadState {...subscriptions} empty={!sub} emptyText="No subscription recorded." />
@@ -33,7 +33,7 @@ export default function CustomerBillingPage() {
             ...(sub.entitlements.warning ? [["Billing notice",title(sub.entitlements.warning)]] : []),
           ]} />}
           {sub && ["active","trialing","past_due"].includes(sub.status) && sub.days_to_renewal <= sub.notice_days &&
-            <p role="status" className="text-sm text-blue-300">{sub.days_to_renewal <= 0
+            <p role="status" className="text-sm text-accent">{sub.days_to_renewal <= 0
               ? "The scheduled billing date has been reached."
               : `Renewal is scheduled in ${sub.days_to_renewal} day(s).`}</p>}
         </Panel>
@@ -41,12 +41,12 @@ export default function CustomerBillingPage() {
           <Panel>
             <h2 className="text-lg font-semibold">Issued invoices</h2>
             <ReadState {...invoices} empty={invoices.data?.data.length===0} emptyText="No invoices issued yet." />
-            <ul className="divide-y divide-white/10">
+            <ul className="divide-y divide-line">
               {invoices.data?.data.map((row) => <li key={row.id} className="py-2">
-                <button className="w-full break-words text-left font-semibold hover:text-blue-300" onClick={() => setSelected(row.id)}>
+                <button className="w-full break-words text-left font-semibold hover:text-accent" onClick={() => setSelected(row.id)}>
                   {row.invoice_number}
                 </button>
-                <p className="text-sm text-slate-400">{row.issued_on} UTC · {title(row.status)} · {money(row.total,row.currency)}</p>
+                <p className="text-sm text-muted">{row.issued_on} UTC · {title(row.status)} · {money(row.total,row.currency)}</p>
               </li>)}
             </ul>
             <Pagination result={invoices.data} offset={offset} onChange={setOffset} />

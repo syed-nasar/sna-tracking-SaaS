@@ -16,8 +16,8 @@ export function Button({ primary, className = "", ...props }) {
 
 export function Feedback({ error,notice }) {
   return <>
-    {error && <p role="alert" className="break-words text-red-300">{error}</p>}
-    {notice && <p role="status" className="text-emerald-300">{notice}</p>}
+    {error && <p role="alert" className="break-words text-negative">{error}</p>}
+    {notice && <p role="status" className="text-positive">{notice}</p>}
   </>;
 }
 
@@ -48,7 +48,7 @@ export function VersionLookup({ initialPlan,revision,busy }) {
 export function DataList({ values }) {
   return <dl className="grid gap-3 text-sm sm:grid-cols-2">
     {values.map(([label,value]) => <div key={label} className="min-w-0">
-      <dt className="text-slate-400">{label}</dt><dd className="break-words">{value ?? "—"}</dd>
+      <dt className="text-muted">{label}</dt><dd className="break-words">{value ?? "—"}</dd>
     </div>)}
   </dl>;
 }
@@ -56,14 +56,14 @@ export function DataList({ values }) {
 export function History({ resource,id,revision }) {
   const [offset,setOffset] = useState(0);
   const { data,error } = useBillingGet(`/history/${resource}/${id}`,{ offset },revision);
-  return <section className="space-y-2 border-t border-white/10 pt-4">
+  return <section className="space-y-2 border-t border-line pt-4">
     <h3 className="font-semibold">Audit history</h3>
     <ReadState data={data} error={error} empty={data?.data.length===0} />
-    <ul className="divide-y divide-white/10 text-sm">
+    <ul className="divide-y divide-line text-sm">
       {data?.data.map((entry) => <li className="space-y-1 break-words py-2" key={entry.id}>
         <p className="capitalize">{title(entry.action)}</p>
-        <p className="text-slate-400">{new Date(entry.created_at).toLocaleString()} · {entry.actor_name}</p>
-        <p className="text-slate-400">{Object.entries(entry.details).map(([key,value]) =>
+        <p className="text-muted">{new Date(entry.created_at).toLocaleString()} · {entry.actor_name}</p>
+        <p className="text-muted">{Object.entries(entry.details).map(([key,value]) =>
           `${key}: ${Array.isArray(value) ? value.join(", ") : value ?? "—"}`).join(" · ")}</p>
       </li>)}
     </ul>

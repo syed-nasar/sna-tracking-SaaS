@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { platformApi } from "../../services/api";
+import { PageHeader } from "../../components/WorkspaceUi";
 
 const endpoint = "/platform/devices/inventory";
 const statuses = ["available", "reserved", "installed", "faulty", "retired"];
-const input = "w-full rounded-lg border border-white/15 bg-[#090d16] px-3 py-2 text-sm";
-const panel = "min-w-0 space-y-4 rounded-xl border border-white/10 bg-[#111827] p-5";
-const action = "rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-50";
-const primary = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold disabled:opacity-50";
+const input = "field-control";
+const panel = "min-w-0 space-y-4 rounded-panel border border-line bg-panel p-4 shadow-panel sm:p-5";
+const action = "control";
+const primary = "inline-flex min-h-10 items-center justify-center rounded-lg bg-action px-4 py-2 text-sm font-semibold hover:bg-action-hover disabled:opacity-50";
 const attributes = [
   ["uniqueId", "IMEI or unique identifier", 100],
   ["deviceName", "Device name", 150],
@@ -91,7 +92,7 @@ function TenantChoice({ onChoose, disabled }) {
           ))}
         </select>
       </label>
-      {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+      {error && <p role="alert" className="text-sm text-negative">{error}</p>}
     </div>
   );
 }
@@ -128,19 +129,19 @@ function DeviceHistory({ url, revision }) {
   }
 
   return (
-    <section className="space-y-3 border-t border-white/10 pt-4">
+    <section className="space-y-3 border-t border-line pt-4">
       <h3 className="font-semibold">Device history</h3>
-      {error && <p role="alert" className="text-red-300">{error}</p>}
+      {error && <p role="alert" className="text-negative">{error}</p>}
       {!records && !error && <p role="status">Loading history…</p>}
-      <ul className="divide-y divide-white/10 text-sm">
+      <ul className="divide-y divide-line text-sm">
         {records?.map((entry) => (
           <li key={entry.id} className="space-y-1 break-words py-2">
             <p className="font-medium capitalize">{entry.action.replaceAll("_", " ")}</p>
-            <p className="text-slate-400">
+            <p className="text-muted">
               {new Date(entry.createdAt).toLocaleString()} · {entry.actorName || "Migration baseline"}
               {entry.actorId ? ` (${entry.actorType} #${entry.actorId})` : ""}
             </p>
-            <p className="text-slate-400">
+            <p className="text-muted">
               {Object.entries(entry.details).filter(([, value]) => value != null).map(([key, value]) =>
                 `${key.replace(/([A-Z])/g, " $1")}: ${Array.isArray(value) ? value.join(", ") : value}`
               ).join(" · ")}
@@ -196,7 +197,7 @@ function InstallationControls({ device, url, busy, mutate }) {
           })}>Remove installation</button>
         )}
       </div>
-      {error && <p role="alert" className="text-red-300">{error}</p>}
+      {error && <p role="alert" className="text-negative">{error}</p>}
     </section>
   );
 }
@@ -250,22 +251,22 @@ function DeviceDetails({ id, onClose, onChanged }) {
         <h2 className="break-words text-lg font-bold">Device details {device && `#${device.id}`}</h2>
         <button className={action} onClick={onClose}>Close details</button>
       </header>
-      {error && <p role="alert" className="break-words text-red-300">{error}</p>}
-      {notice && <p role="status" className="text-emerald-300">{notice}</p>}
+      {error && <p role="alert" className="break-words text-negative">{error}</p>}
+      {notice && <p role="status" className="text-positive">{notice}</p>}
       {!device && !error && <p role="status">Loading device…</p>}
       {device && (
         <>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div><dt className="text-slate-400">Inventory lifecycle</dt><dd className="capitalize">{device.lifecycleStatus}</dd></div>
-            <div><dt className="text-slate-400">Live GPS status</dt><dd className="capitalize">{device.gpsStatus}</dd></div>
-            <div><dt className="text-slate-400">Allocated tenant</dt><dd className="break-words">{device.tenantName || "Unallocated"}</dd></div>
-            <div><dt className="text-slate-400">Installed vehicle</dt><dd className="break-words">{device.vehicleName || "Uninstalled"}</dd></div>
-            <div><dt className="text-slate-400">Traccar ID</dt><dd>{device.traccarDeviceId || "Unlinked"}</dd></div>
-            <div><dt className="text-slate-400">Installed at</dt><dd>{device.installedAt ? new Date(device.installedAt).toLocaleString() : "Unavailable"}</dd></div>
+            <div><dt className="text-muted">Inventory lifecycle</dt><dd className="capitalize">{device.lifecycleStatus}</dd></div>
+            <div><dt className="text-muted">Live GPS status</dt><dd className="capitalize">{device.gpsStatus}</dd></div>
+            <div><dt className="text-muted">Allocated tenant</dt><dd className="break-words">{device.tenantName || "Unallocated"}</dd></div>
+            <div><dt className="text-muted">Installed vehicle</dt><dd className="break-words">{device.vehicleName || "Uninstalled"}</dd></div>
+            <div><dt className="text-muted">Traccar ID</dt><dd>{device.traccarDeviceId || "Unlinked"}</dd></div>
+            <div><dt className="text-muted">Installed at</dt><dd>{device.installedAt ? new Date(device.installedAt).toLocaleString() : "Unavailable"}</dd></div>
           </dl>
           <DeviceForm key={revision} device={device} busy={busy} onSave={(data) => mutate("patch", "", data)} />
           {(!device.traccarDeviceId || !device.identifierVerified) && device.lifecycleStatus !== "retired" && (
-            <form className="space-y-2 border-t border-white/10 pt-4" onSubmit={(event) => {
+            <form className="space-y-2 border-t border-line pt-4" onSubmit={(event) => {
               event.preventDefault();
               const traccarDeviceId = new FormData(event.currentTarget).get("traccarDeviceId");
               void mutate("patch", "/link", { traccarDeviceId });
@@ -277,7 +278,7 @@ function DeviceDetails({ id, onClose, onChanged }) {
             </form>
           )}
           {["available", "reserved"].includes(device.lifecycleStatus) && (
-            <section className="space-y-2 border-t border-white/10 pt-4">
+            <section className="space-y-2 border-t border-line pt-4">
               <TenantChoice key={device.tenantId || "unallocated"} disabled={busy} onChoose={setTenantId} />
               <button className={action} disabled={busy || !tenantId || tenantId === device.tenantId}
                 onClick={async () => {
@@ -351,15 +352,14 @@ export default function DeviceInventoryPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#090d16] text-white">
+    <main className="min-h-[calc(100dvh-4rem)] bg-canvas text-ink">
       <div className="mx-auto max-w-7xl space-y-5 p-5 sm:p-8">
-        <Link className="text-sm text-blue-300" to="/platform/dashboard">Platform dashboard</Link>
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold">GPS Device Inventory</h1>
+        <Link className="text-sm text-accent" to="/platform/dashboard">Platform dashboard</Link>
+        <PageHeader title="GPS Device Inventory" compact>
           <button className={primary} onClick={() => { setCreating(true); setSelected(null); }}>New device</button>
-        </header>
-        {error && <p role="alert" className="text-red-300">{error}</p>}
-        {result?.traccarAvailable === false && <p role="status" className="text-amber-300">Traccar is unavailable. Inventory records are still accessible.</p>}
+        </PageHeader>
+        {error && <p role="alert" className="text-negative">{error}</p>}
+        {result?.traccarAvailable === false && <p role="status" className="text-caution">Traccar is unavailable. Inventory records are still accessible.</p>}
         <div className="grid items-start gap-5 xl:grid-cols-2">
           <section className={panel}>
             <form className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_auto]" onSubmit={(event) => {
@@ -376,16 +376,16 @@ export default function DeviceInventoryPage() {
               <button className={action}>Search</button>
             </form>
             {!result && !error && <p role="status">Loading inventory…</p>}
-            {result?.data.length === 0 && <p className="text-sm text-slate-400">No devices match this search.</p>}
-            <ul className="divide-y divide-white/10">
+            {result?.data.length === 0 && <p className="text-sm text-muted">No devices match this search.</p>}
+            <ul className="divide-y divide-line">
               {result?.data.map((device) => (
                 <li key={device.id} className="py-3">
-                  <button className="flex w-full flex-wrap items-start justify-between gap-2 text-left hover:text-blue-300"
+                  <button className="flex w-full flex-wrap items-start justify-between gap-2 text-left hover:text-accent"
                     onClick={() => { setSelected(device.id); setCreating(false); }}>
                     <span className="min-w-0 break-words font-medium">{device.deviceName || device.uniqueId || `Device #${device.id}`}</span>
-                    <span className="text-sm capitalize text-blue-300">{device.lifecycleStatus}</span>
+                    <span className="text-sm capitalize text-accent">{device.lifecycleStatus}</span>
                   </button>
-                  <p className="break-words text-sm text-slate-400">
+                  <p className="break-words text-sm text-muted">
                     {[device.uniqueId, device.tenantName, device.vehicleName].filter(Boolean).join(" · ") || "Unallocated"}
                   </p>
                 </li>

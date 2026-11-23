@@ -1,45 +1,219 @@
-
 @import "tailwindcss";
 
+@theme inline {
+  --color-canvas: var(--ui-canvas);
+  --color-panel: var(--ui-panel);
+  --color-nav: var(--ui-nav);
+  --color-field: var(--ui-field);
+  --color-hover: var(--ui-hover);
+  --color-ink: var(--ui-ink);
+  --color-secondary: var(--ui-secondary);
+  --color-muted: var(--ui-muted);
+  --color-subtle: var(--ui-subtle);
+  --color-line: var(--ui-line);
+  --color-line-strong: var(--ui-line-strong);
+  --color-accent: var(--ui-accent);
+  --color-accent-soft: var(--ui-accent-soft);
+  --color-accent-line: var(--ui-accent-line);
+  --color-action: var(--ui-action);
+  --color-action-hover: var(--ui-action-hover);
+  --color-on-action: #fff;
+  --color-positive: var(--ui-positive);
+  --color-positive-soft: var(--ui-positive-soft);
+  --color-positive-line: var(--ui-positive-line);
+  --color-caution: var(--ui-caution);
+  --color-caution-soft: var(--ui-caution-soft);
+  --color-caution-line: var(--ui-caution-line);
+  --color-negative: var(--ui-negative);
+  --color-negative-soft: var(--ui-negative-soft);
+  --color-negative-line: var(--ui-negative-line);
+  --color-special: var(--ui-special);
+  --color-special-soft: var(--ui-special-soft);
+  --radius-panel: 0.875rem;
+  --shadow-panel: var(--ui-shadow);
+  --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
 :root {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
-
-  color: #e5e7eb;
-  background: #090d16;
-
+  color-scheme: light;
+  --ui-canvas: #f2f5fa;
+  --ui-panel: #fff;
+  --ui-nav: #fbfcfe;
+  --ui-field: #f7f9fc;
+  --ui-hover: #eaf0f7;
+  --ui-line: #dce4ed;
+  --ui-line-strong: #798aa1;
+  --ui-ink: #162439;
+  --ui-secondary: #34455d;
+  --ui-muted: #4b5e76;
+  --ui-subtle: #59697e;
+  --ui-accent: #2057b5;
+  --ui-accent-soft: #e8f0ff;
+  --ui-accent-line: #acbff0;
+  --ui-action: #2459bf;
+  --ui-action-hover: #194aab;
+  --ui-positive: #116342;
+  --ui-positive-soft: #e1f5ea;
+  --ui-positive-line: #a6d9bf;
+  --ui-caution: #805000;
+  --ui-caution-soft: #fff3d8;
+  --ui-caution-line: #e4c778;
+  --ui-negative: #9f2b40;
+  --ui-negative-soft: #fce9ed;
+  --ui-negative-line: #eeb3bd;
+  --ui-special: #6640a0;
+  --ui-special-soft: #f0eafa;
+  --ui-focus: #2459bf;
+  --ui-shadow: 0 1px 2px rgb(19 35 61 / 6%), 0 4px 16px rgb(19 35 61 / 3%);
+  --ui-map: #e4e9ef;
+  font: 1rem/1.5 var(--font-sans);
+  color: var(--ui-ink);
+  background: var(--ui-canvas);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
-* {
-  box-sizing: border-box;
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ui-canvas: #0b111b;
+  --ui-panel: #131d2a;
+  --ui-nav: #101925;
+  --ui-field: #0e1723;
+  --ui-hover: #1c2a3b;
+  --ui-line: #283749;
+  --ui-line-strong: #647a94;
+  --ui-ink: #edf3fb;
+  --ui-secondary: #d4dfed;
+  --ui-muted: #aab9cd;
+  --ui-subtle: #97abc2;
+  --ui-accent: #9cbdff;
+  --ui-accent-soft: #1c3153;
+  --ui-accent-line: #3e608f;
+  --ui-action: #285ec9;
+  --ui-action-hover: #2254b8;
+  --ui-positive: #87ddb4;
+  --ui-positive-soft: #143a31;
+  --ui-positive-line: #386a59;
+  --ui-caution: #f3c77d;
+  --ui-caution-soft: #33291c;
+  --ui-caution-line: #745b39;
+  --ui-negative: #ffabb8;
+  --ui-negative-soft: #3b2431;
+  --ui-negative-line: #825063;
+  --ui-special: #cfb2f8;
+  --ui-special-soft: #33264c;
+  --ui-focus: #a0c2ff;
+  --ui-shadow: 0 2px 14px rgb(0 0 0 / 15%);
+  --ui-map: #151e2a;
 }
 
-html,
-body,
-#root {
-  min-width: 320px;
-  min-height: 100%;
+html, body, #root { min-width: 320px; min-height: 100%; }
+button, input, select, textarea { font-family: inherit; }
+button:not(:disabled), summary { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+input, select, textarea { accent-color: var(--ui-action); }
+button, select { touch-action: manipulation; }
+:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
+:is(input, textarea, select):focus-visible { outline-offset: 1px; }
+::selection { background: var(--ui-action); color: white; }
+.bg-action { color: white; }
+dialog::backdrop { background: rgb(6 12 25 / 64%); }
+
+@utility control {
+  display: inline-flex;
+  min-height: 2.375rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid var(--ui-line);
+  border-radius: 0.55rem;
+  background: var(--ui-panel);
+  padding: 0.45rem 0.75rem;
+  color: var(--ui-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  &:hover:not(:disabled) { background: var(--ui-hover); }
+  &:disabled { opacity: 0.55; }
 }
 
-body {
-  margin: 0;
+@utility field-control {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.5rem;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 0.55rem;
+  background: var(--ui-field);
+  padding: 0.45rem 0.7rem;
+  font-size: 0.875rem;
+  color: var(--ui-ink);
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
+.workspace-shell { --sidebar-width: 15.75rem; }
+.workspace-shell[data-collapsed="true"] { --sidebar-width: 4.5rem; }
+.workspace-sidebar { width: var(--sidebar-width); }
+.workspace-content { min-width: 0; }
+@media (min-width: 64rem) {
+  .workspace-content { margin-inline-start: var(--sidebar-width); }
+}
+.workspace-nav-link[aria-current="page"] {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
+}
+.workspace-nav-link[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.55rem;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: currentColor;
 }
 
-button {
-  cursor: pointer;
-}
+meter::-webkit-meter-bar { background: var(--ui-hover); border: 0; border-radius: 1rem; }
+meter::-webkit-meter-optimum-value { background: var(--ui-positive); border-radius: 1rem; }
+meter::-moz-meter-bar { background: var(--ui-positive); border-radius: 1rem; }
 
-::selection {
-  background: #2563eb;
-  color: #ffffff;
+.fleet-map .leaflet-container, .fleet-map .leaflet-container a.leaflet-popup-close-button {
+  background-color: var(--ui-map);
+  color: var(--ui-ink);
+  font-family: inherit;
+}
+.fleet-map :is(.leaflet-popup-content-wrapper, .leaflet-popup-tip, .leaflet-tooltip,
+  .leaflet-control-zoom a, .leaflet-control-attribution) {
+  background: var(--ui-panel);
+  color: var(--ui-ink);
+  border-color: var(--ui-line);
+}
+.fleet-map .leaflet-control-attribution a { color: var(--ui-accent); }
+.fleet-map .leaflet-control-zoom a:hover { background: var(--ui-hover); }
+.fleet-map .leaflet-popup-content { margin: 0.75rem; }
+:root[data-theme="dark"] .fleet-map[data-layer="street"] .leaflet-tile-pane {
+  filter: brightness(0.76) saturate(0.65) contrast(1.06);
+}
+@media (pointer: coarse) {
+  .workspace-topbar .control, .workspace-nav-link, .fleet-map-toolbar button { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+@media print {
+  :root, :root[data-theme="dark"] {
+    color-scheme: light;
+    --ui-ink: #131b28;
+    --ui-muted: #364257;
+    --ui-subtle: #435063;
+    --ui-secondary: #273448;
+    --ui-canvas: white;
+    --ui-panel: white;
+    --ui-field: white;
+    --ui-line: #c3cbd5;
+  }
+  .invoice-print table { min-width: 0; }
+  .invoice-print tr { break-inside: avoid; }
 }

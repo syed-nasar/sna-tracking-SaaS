@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { useConnectivityGet } from "./connectivity-data";
 
-export const fieldClass = "w-full min-w-0 rounded-lg border border-white/15 bg-[#090d16] px-3 py-2 text-sm";
-export const panelClass = "min-w-0 space-y-4 rounded-xl border border-white/10 bg-[#111827] p-4 sm:p-5";
-export const buttonClass = "rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-50";
-export const primaryClass = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold disabled:opacity-50";
+export const fieldClass = "field-control";
+export const panelClass = "min-w-0 space-y-4 rounded-panel border border-line bg-panel p-4 shadow-panel sm:p-5";
+export const buttonClass = "control";
+export const primaryClass = "inline-flex min-h-10 items-center justify-center rounded-lg bg-action px-4 py-2 text-sm font-semibold hover:bg-action-hover disabled:opacity-50";
 
 
 export function ReadState({ data, error, empty = false, emptyText = "No records found." }) {
-  if (error) return <p role="alert" className="break-words text-sm text-red-300">{error}</p>;
-  if (!data) return <p role="status" className="text-sm text-slate-400">Loading…</p>;
-  if (empty) return <p className="text-sm text-slate-400">{emptyText}</p>;
+  if (error) return <p role="alert" className="break-words text-sm text-negative">{error}</p>;
+  if (!data) return <p role="status" className="text-sm text-muted">Loading…</p>;
+  if (empty) return <p className="text-sm text-muted">{emptyText}</p>;
   return null;
 }
 
@@ -79,7 +79,7 @@ export function Lookup({ path, params, name, label, value, currentLabel, onChang
           </option>)}
         </select>
       </label>
-      {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+      {error && <p role="alert" className="text-sm text-negative">{error}</p>}
       {data && (offset > 0 || data.pagination.hasMore) && <Pagination result={data} offset={offset} onChange={setOffset} />}
     </div>
   );

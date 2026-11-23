@@ -9,8 +9,8 @@ const roles = [
   ["manager", "Manager"],
   ["tenant_admin", "Tenant administrator"],
 ];
-const inputClass = "w-full rounded-lg border border-white/15 bg-[#090d16] px-3 py-2 text-white";
-const panelClass = "rounded-xl border border-white/10 bg-[#0d1422] p-5";
+const inputClass = "w-full rounded-lg border border-line-strong bg-canvas px-3 py-2 text-ink";
+const panelClass = "rounded-xl border border-line bg-panel p-5";
 
 function RoleOptions() {
   return roles.map(([value, label]) => <option key={value} value={value}>{label}</option>);
@@ -97,9 +97,9 @@ function UserManagement({ profile }) {
     <TenantLayout title="User Management">
       <main className="mx-auto max-w-6xl space-y-6 p-5 sm:p-8">
         <h1 className="text-2xl font-bold">User Management</h1>
-        {loadError && <p role="alert" className="text-red-300">{loadError}</p>}
+        {loadError && <p role="alert" className="text-negative">{loadError}</p>}
         {!users && !loadError && <p role="status">Loading users…</p>}
-        {notice && <p role="status" className="text-green-300">{notice}</p>}
+        {notice && <p role="status" className="text-positive">{notice}</p>}
         {users && (
           <>
             <form className={panelClass} onSubmit={createUser} autoComplete="off">
@@ -121,36 +121,36 @@ function UserManagement({ profile }) {
                   <span>Role</span>
                   <select className={inputClass} name="role" defaultValue="viewer"><RoleOptions /></select>
                 </label>
-                <button className="justify-self-start rounded-lg bg-blue-600 px-4 py-2 font-semibold disabled:opacity-50">
+                <button className="justify-self-start rounded-lg bg-action px-4 py-2 font-semibold disabled:opacity-50">
                   {creating ? "Adding…" : "Add user"}
                 </button>
               </fieldset>
-              {formError && <p role="alert" className="mt-3 text-red-300">{formError}</p>}
+              {formError && <p role="alert" className="mt-3 text-negative">{formError}</p>}
             </form>
             <section className={panelClass}>
               <h2 className="mb-4 text-lg font-semibold">Company users</h2>
-              {updateError && <p role="alert" className="mb-4 text-red-300">{updateError}</p>}
-              <ul className="divide-y divide-white/10">
+              {updateError && <p role="alert" className="mb-4 text-negative">{updateError}</p>}
+              <ul className="divide-y divide-line">
                 {users.map((user) => {
                   const isSelf = String(user.id) === String(profile.id);
                   return (
                     <li key={user.id} className="grid gap-3 py-4 md:grid-cols-[minmax(0,1fr)_13rem_7rem_7rem] md:items-center">
                       <div className="min-w-0">
                         <p className="break-words font-medium">{user.fullName}{isSelf && " (you)"}</p>
-                        <p className="break-all text-sm text-slate-400">{user.email}</p>
+                        <p className="break-all text-sm text-muted">{user.email}</p>
                       </div>
                       <select className={inputClass} aria-label={`Role for ${user.email}`} value={user.role}
                         disabled={isSelf || pendingId !== null}
                         onChange={(event) => updateUser(user, { role: event.target.value })}>
                         <RoleOptions />
                       </select>
-                      <span className={user.isActive ? "text-green-300" : "text-slate-400"}>
+                      <span className={user.isActive ? "text-positive" : "text-muted"}>
                         {user.isActive ? "Active" : "Inactive"}
                       </span>
                       {!isSelf && (
                         <button type="button" disabled={pendingId !== null}
                           aria-label={`${user.isActive ? "Deactivate" : "Activate"} ${user.email}`}
-                          className="justify-self-start rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-50"
+                          className="justify-self-start rounded-lg border border-line-strong px-3 py-2 text-sm disabled:opacity-50"
                           onClick={() => updateUser(user, { isActive: !user.isActive })}>
                           {user.isActive ? "Deactivate" : "Activate"}
                         </button>

@@ -5,6 +5,7 @@ import ConnectivityCatalog from "./connectivity/ConnectivityCatalog";
 import ConnectivitySummary from "./connectivity/ConnectivitySummary";
 import SimDetails from "./connectivity/SimDetails";
 import SimForm from "./connectivity/SimForm";
+import { PageHeader } from "../../components/WorkspaceUi";
 import {
   buttonClass, Input, Lookup, Pagination, panelClass, primaryClass, ReadState, Select,
 } from "./connectivity/connectivity-ui";
@@ -43,15 +44,14 @@ export default function SimConnectivityPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#090d16] text-white">
+    <main className="min-h-[calc(100dvh-4rem)] bg-canvas text-ink">
       <div className="mx-auto max-w-7xl space-y-5 p-4 sm:p-8">
-        <Link className="text-sm text-blue-300" to="/platform/dashboard">Platform dashboard</Link>
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold">SIM &amp; Connectivity</h1>
+        <Link className="text-sm text-accent" to="/platform/dashboard">Platform dashboard</Link>
+        <PageHeader title="SIM & Connectivity" compact>
           {tab === "sims" && <button className={primaryClass} onClick={() => { setRegistering(true); setSelected(null); setError(""); }}>New SIM</button>}
-        </header>
-        {notice && <p role="status" className="text-emerald-300">{notice}</p>}
-        {error && <p role="alert" className="text-red-300">{error}</p>}
+        </PageHeader>
+        {notice && <p role="status" className="text-positive">{notice}</p>}
+        {error && <p role="alert" className="text-negative">{error}</p>}
         <ConnectivitySummary {...summary} busy={busy} onSave={(warningDays) => save("/settings", { warningDays }, "patch")} />
         <nav aria-label="Connectivity administration" className="flex flex-wrap gap-2">
           {[["sims", "SIM inventory"], ["operators", "Mobile operators"], ["plans", "Connectivity plans"]].map(([id, label]) => (
@@ -81,15 +81,15 @@ export default function SimConnectivityPage() {
                 <button className={buttonClass}>Apply filters</button>
               </form>
               <ReadState data={list} error={listError} empty={list?.data.length === 0} emptyText="No SIMs match these filters." />
-              <ul className="divide-y divide-white/10">
+              <ul className="divide-y divide-line">
                 {list?.data.map((sim) => (
                   <li className="py-2" key={sim.id}>
-                    <button className="w-full break-words text-left font-semibold hover:text-blue-300"
+                    <button className="w-full break-words text-left font-semibold hover:text-accent"
                       onClick={() => { setSelected(sim.id); setRegistering(false); }}>{sim.label}</button>
-                    <p className="break-words text-sm text-slate-400">
+                    <p className="break-words text-sm text-muted">
                       {[sim.maskedIccid, sim.operatorName, sim.lifecycle, sim.deviceName || (sim.deviceId ? `GPS #${sim.deviceId}` : "Unassigned")].filter(Boolean).join(" · ")}
                     </p>
-                    {sim.expiresAt && <p className="text-sm text-slate-400">{sim.daysRemaining <= 0 ? "Expired" : "Planned expiry"} · {day(sim.expiresAt)}</p>}
+                    {sim.expiresAt && <p className="text-sm text-muted">{sim.daysRemaining <= 0 ? "Expired" : "Planned expiry"} · {day(sim.expiresAt)}</p>}
                   </li>
                 ))}
               </ul>

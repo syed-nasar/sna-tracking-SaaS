@@ -6,7 +6,7 @@ export default function ConnectivitySummary({ data, error, onSave, busy, compact
     <section className={panelClass} aria-label="Connectivity summary">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">SIM expiry and lifecycle</h2>
-        {compact && <Link to="/platform/connectivity" className="text-sm text-blue-300">Manage SIMs and plans</Link>}
+        {compact && <Link to="/platform/connectivity" className="text-sm text-accent">Manage SIMs and plans</Link>}
       </div>
       <ReadState data={data} error={error} />
       {data && (
@@ -16,8 +16,8 @@ export default function ConnectivitySummary({ data, error, onSave, busy, compact
               ["Active", data.active], ["Expiring soon", data.expiringSoon], ["Expired", data.expired],
               ["Suspended", data.suspended], ["Faulty", data.faulty],
             ].map(([label, count]) => (
-              <div key={label} className="rounded-lg bg-white/5 p-3">
-                <dt className="text-slate-400">{label}</dt><dd className="text-xl font-semibold">{count}</dd>
+              <div key={label} className="rounded-lg bg-hover p-3">
+                <dt className="text-muted">{label}</dt><dd className="text-xl font-semibold">{count}</dd>
               </div>
             ))}
           </dl>

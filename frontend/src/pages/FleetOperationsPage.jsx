@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import TenantLayout from "../components/TenantLayout";
+import { Modal, PageHeader, SearchField, StatusBadge } from "../components/WorkspaceUi";
 import { useAuth } from "../context/AuthContext";
 import { tenantApi } from "../services/api";
 
-const panel = "min-w-0 space-y-4 rounded-xl border border-white/10 bg-[#111827] p-5";
-const field = "w-full rounded-lg border border-white/15 bg-[#090d16] px-3 py-2";
-const action = "rounded-lg border border-white/15 px-3 py-2 text-sm disabled:opacity-50";
-const primary = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold disabled:opacity-50";
+const panel = "min-w-0 space-y-4 rounded-panel border border-line bg-panel p-4 shadow-panel sm:p-5";
+const field = "field-control";
+const action = "control";
+const primary = "rounded-lg bg-action px-4 py-2 text-sm font-semibold disabled:opacity-50";
 
 function useFleetDirectory(resource) {
   const [items, setItems] = useState(null);
@@ -46,6 +47,9 @@ function Groups({ canManage }) {
   const { items, error, saving, mutate } = useFleetDirectory("groups");
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [search, setSearch] = useState("");
+  const groups = items?.filter((group) => group.name.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   async function save(event) {
     event.preventDefault();
@@ -83,11 +87,13 @@ function Groups({ canManage }) {
           </div>
         </form>
       )}
-      {error && <p role="alert" className="text-red-300">{error}</p>}
+      {error && <p role="alert" className="text-negative">{error}</p>}
       {!items && !error && <p role="status">Loading groups…</p>}
-      {items?.length === 0 && <p className="text-sm text-slate-400">No vehicle groups yet.</p>}
-      <ul className="divide-y divide-white/10">
-        {items?.map((group) => (
+      {items?.length === 0 && <p className="text-sm text-muted">No vehicle groups yet.</p>}
+      {items?.length > 0 && <SearchField label="Search vehicle groups" value={search} onChange={setSearch} />}
+      {items?.length > 0 && groups.length === 0 && <p className="text-sm text-muted">No groups match your search.</p>}
+      <ul className="divide-y divide-line">
+        {groups?.map((group) => (
           <li key={group.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <span className="min-w-0 break-words font-medium">{group.name}</span>
             {canManage && (
@@ -100,15 +106,19 @@ function Groups({ canManage }) {
         ))}
       </ul>
       {canManage && deleting && (
-        <div className="space-y-3 rounded-lg border border-amber-500/30 p-3">
-          <p className="break-words text-sm">Delete {deleting.name}? Its vehicles will become ungrouped.</p>
-          <div className="flex flex-wrap gap-2">
-            <button className={action} disabled={saving} onClick={remove}>Delete group</button>
-            <button className={action} disabled={saving} onClick={() => setDeleting(null)}>Cancel</button>
+        <Modal labelId="delete-group-title" busy={saving} onClose={() => setDeleting(null)}>
+          <div className="space-y-4 p-5">
+            <h3 id="delete-group-title" className="break-words font-semibold">Delete {deleting.name}?</h3>
+            <p className="text-sm text-muted">Its vehicles will become ungrouped.</p>
+            {error && <p role="alert" className="text-negative">{error}</p>}
+            <div className="flex flex-wrap gap-2">
+              <button className={action} disabled={saving} onClick={() => setDeleting(null)}>Cancel</button>
+              <button className="control border-negative-line text-negative" disabled={saving} onClick={remove}>Delete group</button>
+            </div>
           </div>
-        </div>
+        </Modal>
       )}
-      <Link to="/vehicles" className="inline-block text-sm text-blue-300">Manage vehicle assignments</Link>
+      <Link to="/vehicles" className="inline-block text-sm text-accent">Manage vehicle assignments</Link>
     </section>
   );
 }
@@ -170,19 +180,19 @@ function AssignmentHistory({ driver, onClose }) {
   }
 
   return (
-    <section className="space-y-3 rounded-lg border border-white/10 p-4">
+    <section className="space-y-3 rounded-lg border border-line p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="break-words font-semibold">{driver.fullName} assignment history</h3>
         <button className={action} onClick={onClose}>Close history</button>
       </div>
-      {error && <p role="alert" className="text-red-300">{error}</p>}
+      {error && <p role="alert" className="text-negative">{error}</p>}
       {!records && !error && <p role="status">Loading history…</p>}
-      {records?.length === 0 && <p className="text-sm text-slate-400">No assignments yet.</p>}
-      <ul className="divide-y divide-white/10">
+      {records?.length === 0 && <p className="text-sm text-muted">No assignments yet.</p>}
+      <ul className="divide-y divide-line">
         {records?.map((entry) => (
           <li key={entry.id} className="space-y-1 py-2">
             <p className="break-words font-medium">{entry.vehicleName}</p>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-muted">
               {new Date(entry.startedAt).toLocaleString()} · {entry.endedAt ? new Date(entry.endedAt).toLocaleString() : "Current assignment"}
             </p>
           </li>
@@ -199,6 +209,12 @@ function Drivers({ canManage }) {
   const [historyId, setHistoryId] = useState(null);
   const [deactivating, setDeactivating] = useState(null);
   const [historyVersion, setHistoryVersion] = useState(0);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const visibleDrivers = items?.filter((driver) =>
+    (!status || driver.isActive === (status === "active")) &&
+    [driver.fullName, driver.licenseNumber].some((value) => value?.toLowerCase().includes(search.trim().toLowerCase()))
+  ).sort((a, b) => a.fullName.localeCompare(b.fullName));
   const historyDriver = items?.find((driver) => driver.id === historyId);
   const replaceDriver = (drivers, driver) => drivers.map((entry) => entry.id === driver.id ? driver : entry);
 
@@ -228,20 +244,27 @@ function Drivers({ canManage }) {
       {canManage && items && (
         <DriverForm key={editing?.id ?? "new"} driver={editing} saving={saving} onSave={save} onCancel={() => setEditing(null)} />
       )}
-      {error && <p role="alert" className="text-red-300">{error}</p>}
+      {error && <p role="alert" className="text-negative">{error}</p>}
       {!items && !error && <p role="status">Loading drivers…</p>}
-      {items?.length === 0 && <p className="text-sm text-slate-400">No drivers yet.</p>}
-      <ul className="divide-y divide-white/10">
-        {items?.map((driver) => (
+      {items?.length === 0 && <p className="text-sm text-muted">No drivers yet.</p>}
+      {items?.length > 0 && <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,auto)]">
+        <SearchField label="Search drivers" value={search} onChange={setSearch} />
+        <select className={field} aria-label="Driver status" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option>
+        </select>
+      </div>}
+      {items?.length > 0 && visibleDrivers.length === 0 && <p className="text-sm text-muted">No drivers match your filters.</p>}
+      <ul className="divide-y divide-line">
+        {visibleDrivers?.map((driver) => (
           <li key={driver.id} className="space-y-2 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="min-w-0 break-words font-medium">{driver.fullName}</span>
-              <span className={driver.isActive ? "text-sm text-emerald-300" : "text-sm text-slate-400"}>
+              <StatusBadge tone={driver.isActive ? "positive" : "neutral"}>
                 {driver.isActive ? "Active" : "Inactive"}
-              </span>
+              </StatusBadge>
             </div>
-            {driver.phone && <p className="break-words text-sm text-slate-400">Phone {driver.phone}</p>}
-            {driver.licenseNumber && <p className="break-words text-sm text-slate-400">License {driver.licenseNumber}</p>}
+            {driver.phone && <p className="break-words text-sm text-muted">Phone {driver.phone}</p>}
+            {driver.licenseNumber && <p className="break-words text-sm text-muted">License {driver.licenseNumber}</p>}
             <div className="flex flex-wrap gap-2">
               <button className={action} onClick={() => setHistoryId(driver.id)}>Assignment history</button>
               {canManage && <button className={action} disabled={saving} onClick={() => setEditing(driver)}>Edit</button>}
@@ -251,13 +274,17 @@ function Drivers({ canManage }) {
         ))}
       </ul>
       {canManage && deactivating && (
-        <div className="space-y-3 rounded-lg border border-amber-500/30 p-3">
-          <p className="break-words text-sm">Deactivate {deactivating.fullName}? Their current vehicle assignments will end.</p>
-          <div className="flex flex-wrap gap-2">
-            <button className={action} disabled={saving} onClick={deactivate}>Deactivate driver</button>
-            <button className={action} disabled={saving} onClick={() => setDeactivating(null)}>Cancel</button>
+        <Modal labelId="deactivate-driver-title" busy={saving} onClose={() => setDeactivating(null)}>
+          <div className="space-y-4 p-5">
+            <h3 id="deactivate-driver-title" className="break-words font-semibold">Deactivate {deactivating.fullName}?</h3>
+            <p className="text-sm text-muted">Their current vehicle assignments will end.</p>
+            {error && <p role="alert" className="text-negative">{error}</p>}
+            <div className="flex flex-wrap gap-2">
+              <button className={action} disabled={saving} onClick={() => setDeactivating(null)}>Cancel</button>
+              <button className="control border-caution-line text-caution" disabled={saving} onClick={deactivate}>Deactivate driver</button>
+            </div>
           </div>
-        </div>
+        </Modal>
       )}
       {historyDriver && (
         <AssignmentHistory key={`${historyId}-${historyVersion}`} driver={historyDriver} onClose={() => setHistoryId(null)} />
@@ -274,7 +301,7 @@ export default function FleetOperationsPage() {
   return (
     <TenantLayout title="Fleet Operations">
       <main className="mx-auto max-w-6xl space-y-5 p-5 sm:p-8">
-        <h1 className="text-2xl font-bold">Fleet Operations</h1>
+        <PageHeader title="Fleet Operations" description="Manage vehicle groups, drivers and assignment history." compact />
         <div className="grid items-start gap-5 lg:grid-cols-2">
           <Groups canManage={canManage} />
           <Drivers canManage={canManage} />

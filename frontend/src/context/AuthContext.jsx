@@ -189,13 +189,13 @@ export function AuthProvider({ children }) {
 
   if (restoring) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#090d16] p-5 text-white">
+      <main className="flex min-h-screen items-center justify-center bg-canvas p-5 text-ink">
         {restoreError ? (
-          <div className="space-y-4 rounded-xl border border-white/10 bg-[#111827] p-5">
+          <div className="space-y-4 rounded-xl border border-line bg-panel p-5">
             <p role="alert">Could not verify your saved session. Check the connection and try again.</p>
             <div className="flex flex-wrap gap-3">
-              <button className="rounded-lg bg-blue-600 px-4 py-2" onClick={() => setRestoreError(false)}>Retry</button>
-              <button className="rounded-lg border border-white/20 px-4 py-2" onClick={logout}>Sign in again</button>
+              <button className="rounded-lg bg-action px-4 py-2" onClick={() => setRestoreError(false)}>Retry</button>
+              <button className="rounded-lg border border-line-strong px-4 py-2" onClick={logout}>Sign in again</button>
             </div>
           </div>
         ) : <p role="status">Restoring session…</p>}

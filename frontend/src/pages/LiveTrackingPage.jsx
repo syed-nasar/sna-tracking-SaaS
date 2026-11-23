@@ -12,10 +12,10 @@ import {
   Clock3,
   Crosshair,
   Layers,
-  LoaderCircle,
   MapPin,
+  PanelRightClose,
+  PanelRightOpen,
   RefreshCw,
-  Search,
   Truck,
   Users,
 } from "lucide-react";
@@ -34,6 +34,7 @@ import "leaflet/dist/leaflet.css";
 import { useAuth } from "../context/AuthContext";
 import TenantLayout from "../components/TenantLayout";
 import FleetGroupFilter from "../components/FleetGroupFilter";
+import { PageHeader, SearchField, StateNotice, StatusBadge } from "../components/WorkspaceUi";
 import { tenantApi } from "../services/api";
 
 const DEFAULT_CENTER = [24.8607, 67.0011];
@@ -174,7 +175,7 @@ function VehicleImage({
   if (!source) {
     return (
       <div
-        className={`flex items-center justify-center bg-blue-500/10 text-blue-400 ${className}`}
+        className={`flex items-center justify-center bg-accent-soft text-accent ${className}`}
       >
         <Truck size={iconSize} />
       </div>
@@ -195,20 +196,26 @@ function GpsStatusBadge({ status }) {
     status || "unknown"
   ).toLowerCase();
 
-  const style =
-    normalized === "online"
-      ? "bg-emerald-500/10 text-emerald-400"
-      : normalized === "offline"
-        ? "bg-amber-500/10 text-amber-400"
-        : "bg-slate-500/10 text-slate-400";
+  return <StatusBadge tone={normalized === "online" ? "positive" : normalized === "offline" ? "caution" : "neutral"}>{normalized}</StatusBadge>;
+}
 
-  return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${style}`}
-    >
-      {normalized}
-    </span>
-  );
+function motionStatus(vehicle) {
+  if (vehicle.gpsStatus === "offline") return ["Offline", "caution"];
+  const position = vehicle.position;
+  const fix = Date.parse(position?.fixTime ?? position?.deviceTime);
+  const elapsed = Date.now() - fix;
+  if (vehicle.gpsStatus !== "online" || !validCoordinates(position) || position.valid === false ||
+      !Number.isFinite(fix) || elapsed < 0 || elapsed > 120_000) return ["Unknown", "neutral"];
+
+  const { motion, ignition } = position.attributes ?? {};
+  const { speed } = position;
+  if (motion === true || (Number.isFinite(speed) && speed > 0)) return ["Moving", "positive"];
+  if (motion === false || speed === 0) return ignition === true ? ["Idle", "caution"] : ["Stopped", "accent"];
+  return ["Unknown", "neutral"];
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 function fitVehicleBounds(map, locatedVehicles) {
@@ -219,11 +226,9 @@ function fitVehicleBounds(map, locatedVehicles) {
   if (locatedVehicles.length === 1) {
     const position = locatedVehicles[0].position;
 
-    map.flyTo(
-      [position.latitude, position.longitude],
-      15,
-      { duration: 0.8 }
-    );
+    const point = [position.latitude, position.longitude];
+    if (prefersReducedMotion()) map.setView(point, 15, { animate: false });
+    else map.flyTo(point, 15, { duration: 0.8 });
 
     return;
   }
@@ -235,11 +240,13 @@ function fitVehicleBounds(map, locatedVehicles) {
     ]
   );
 
-  map.flyToBounds(bounds, {
+  const options = {
     padding: [60, 60],
     maxZoom: 15,
     duration: 0.8,
-  });
+  };
+  if (prefersReducedMotion()) map.fitBounds(bounds, { ...options, animate: false });
+  else map.flyToBounds(bounds, options);
 }
 
 function MapController({
@@ -253,6 +260,12 @@ function MapController({
   const initialized = useRef(false);
   const lastFocusRequest = useRef(0);
   const lastShowAllRequest = useRef(0);
+
+  useEffect(() => {
+    const resize = new ResizeObserver(() => map.invalidateSize({ pan: false }));
+    resize.observe(map.getContainer());
+    return () => resize.disconnect();
+  }, [map]);
 
   useEffect(() => {
     if (
@@ -302,14 +315,9 @@ function MapController({
       return;
     }
 
-    map.flyTo(
-      [
-        selectedVehicle.position.latitude,
-        selectedVehicle.position.longitude,
-      ],
-      16,
-      { duration: 0.8 }
-    );
+    const point = [selectedVehicle.position.latitude, selectedVehicle.position.longitude];
+    if (prefersReducedMotion()) map.setView(point, 16, { animate: false });
+    else map.flyTo(point, 16, { duration: 0.8 });
   }, [map, selectedVehicle, focusRequest]);
 
   useEffect(() => {
@@ -333,6 +341,7 @@ function VehicleListItem({
   selected,
   onSelect,
 }) {
+  const [motion, tone] = motionStatus(vehicle);
   return (
     <button
       type="button"
@@ -340,55 +349,61 @@ function VehicleListItem({
       aria-pressed={selected}
       className={`mb-2 w-full rounded-xl border p-3 text-left transition ${
         selected
-          ? "border-blue-500/50 bg-blue-500/10"
-          : "border-white/5 bg-white/[0.025] hover:bg-white/5"
+          ? "border-accent-line bg-accent-soft"
+          : "border-line bg-hover hover:bg-hover"
       }`}
     >
       <div className="flex items-start gap-3">
         <VehicleImage
           vehicleId={vehicle.id}
           imageUrl={vehicle.imageUrl}
-          className="h-16 w-20 shrink-0 rounded-xl"
+          className="h-12 w-14 shrink-0 rounded-lg"
           alt={getVehicleName(vehicle)}
         />
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-white">
+          <p className="truncate text-sm font-semibold text-ink">
             {getVehicleName(vehicle)}
           </p>
 
-          <p className="mt-1 truncate text-xs text-slate-400">
+          <p className="mt-1 truncate text-xs text-muted">
             {vehicle.registrationNumber ||
               "No registration"}
           </p>
 
-          <p className="mt-1 truncate text-[11px] text-slate-500">
+          <p className="mt-1 truncate text-[11px] text-subtle">
             {getVehicleModel(vehicle)}
           </p>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <GpsStatusBadge status={vehicle.gpsStatus} />
+        <div className="flex flex-wrap gap-1.5">
+          <GpsStatusBadge status={vehicle.gpsStatus} />
+          {vehicle.gpsStatus === "online" && <StatusBadge tone={tone}>{motion === "Unknown" ? "Motion unknown" : motion}</StatusBadge>}
+        </div>
 
-        <span className="text-[11px] text-slate-400">
+        <span className="text-[11px] text-muted">
           {validCoordinates(vehicle.position)
             ? formatSpeed(vehicle.position)
             : "No GPS position"}
         </span>
       </div>
+      {vehicle.position && <p className="mt-1 text-xs text-muted">
+        Last fix {formatTime(vehicle.position.fixTime ?? vehicle.position.deviceTime)}
+      </p>}
     </button>
   );
 }
 
 function DetailRow({ label, value }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-white/5 pb-3 text-sm">
-      <span className="text-slate-500">
+    <div className="flex items-start justify-between gap-4 border-b border-line pb-3 text-sm">
+      <span className="text-subtle">
         {label}
       </span>
 
-      <span className="text-right font-medium text-slate-200">
+      <span className="text-right font-medium text-ink">
         {value}
       </span>
     </div>
@@ -401,10 +416,11 @@ function SelectedVehicleDetails({ vehicle, showOperations, positionError }) {
   }
 
   const hasPosition = validCoordinates(vehicle.position);
+  const [motion, tone] = motionStatus(vehicle);
 
   return (
-    <section className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-[#111827]">
-      <div className="border-b border-white/10 px-5 py-4">
+    <section className="mt-5 overflow-hidden rounded-panel border border-line bg-panel">
+      <div className="border-b border-line px-5 py-4">
         <h3 className="font-bold">
           Selected Vehicle
         </h3>
@@ -425,12 +441,14 @@ function SelectedVehicleDetails({ vehicle, showOperations, positionError }) {
               {getVehicleName(vehicle)}
             </h4>
 
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-muted">
               {getVehicleModel(vehicle)}
             </p>
           </div>
 
-          <GpsStatusBadge status={vehicle.gpsStatus} />
+          <div className="flex flex-wrap gap-1.5"><GpsStatusBadge status={vehicle.gpsStatus} />
+            {vehicle.gpsStatus === "online" && <StatusBadge tone={tone}>{motion === "Unknown" ? "Motion unknown" : motion}</StatusBadge>}
+          </div>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
@@ -483,7 +501,7 @@ function SelectedVehicleDetails({ vehicle, showOperations, positionError }) {
         </div>
 
         {!hasPosition && (
-          <p className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-400">
+          <p className="mt-4 rounded-xl border border-caution-line bg-caution-soft p-3 text-xs text-caution">
             {positionError || "This vehicle has no reported GPS coordinates yet."}
           </p>
         )}
@@ -503,15 +521,15 @@ function VehicleMapPopup({ vehicle }) {
         alt={getVehicleName(vehicle)}
       />
 
-      <h4 className="text-sm font-bold text-slate-900">
+      <h4 className="text-sm font-bold text-subtle">
         {getVehicleName(vehicle)}
       </h4>
 
-      <p className="mt-1 text-xs text-slate-600">
+      <p className="mt-1 text-xs text-subtle">
         {getVehicleModel(vehicle)}
       </p>
 
-      <div className="mt-3 space-y-1.5 text-xs text-slate-700">
+      <div className="mt-3 space-y-1.5 text-xs text-subtle">
         <p>
           <strong>Registration:</strong>{" "}
           {vehicle.registrationNumber ||
@@ -538,6 +556,38 @@ function VehicleMapPopup({ vehicle }) {
       </div>
     </div>
   );
+}
+
+function VehicleMarker({ vehicle, selected, onSelect }) {
+  const marker = useRef(null);
+  const [, tone] = motionStatus(vehicle);
+  const name = getVehicleName(vehicle);
+  useEffect(() => {
+    const element = marker.current?.getElement();
+    if (!element) return;
+    element.setAttribute("tabindex", "0");
+    element.setAttribute("role", "button");
+    element.setAttribute("aria-label", `Select ${name} on map`);
+    element.setAttribute("aria-pressed", String(selected));
+    const activate = (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        event.stopPropagation();
+        onSelect(vehicle);
+      }
+    };
+    element.addEventListener("keydown", activate);
+    return () => element.removeEventListener("keydown", activate);
+  }, [name, onSelect, selected, vehicle]);
+
+  return <CircleMarker ref={marker} center={[vehicle.position.latitude, vehicle.position.longitude]}
+    radius={selected ? 11 : 8} pathOptions={{
+      color: "var(--ui-panel)", fillColor: `var(--ui-${tone === "neutral" ? "muted" : tone})`,
+      weight: selected ? 4 : 2, fillOpacity: 0.95,
+    }} eventHandlers={{ click: () => onSelect(vehicle) }}>
+    <Tooltip direction="top">{name}</Tooltip>
+    <Popup><VehicleMapPopup vehicle={vehicle} /></Popup>
+  </CircleMarker>;
 }
 
 export default function LiveTrackingPage() {
@@ -597,6 +647,7 @@ export default function LiveTrackingPage() {
   const [mapType, setMapType] = useState("street");
   const [focusRequest, setFocusRequest] = useState(0);
   const [showAllRequest, setShowAllRequest] = useState(0);
+  const [listOpen, setListOpen] = useState(true);
 
   const requestInProgress = useRef(false);
 
@@ -734,13 +785,13 @@ export default function LiveTrackingPage() {
     selectedVehicle?.position
   );
 
-  const selectVehicle = (vehicle) => {
+  const selectVehicle = useCallback((vehicle) => {
     setSelectedId(vehicle.id);
 
     if (validCoordinates(vehicle.position)) {
       setFocusRequest((current) => current + 1);
     }
-  };
+  }, []);
 
   const handleShowAll = () => {
     setShowAllRequest((current) => current + 1);
@@ -764,28 +815,13 @@ export default function LiveTrackingPage() {
 
   return (
     <TenantLayout title={labels.layoutTitle}>
-      <main className="mx-auto max-w-7xl px-5 py-9 sm:px-8">
-        {/* Heading */}
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
-          <div>
-            <p className="mb-2 text-sm font-semibold text-blue-400">
-              {labels.eyebrow}
-            </p>
-
-            <h2 className="text-3xl font-bold tracking-tight">
-              {labels.heading}
-            </h2>
-
-            <p className="mt-3 text-sm text-slate-400">
-              {labels.description}
-            </p>
-          </div>
-
+      <main className="mx-auto max-w-[108rem] px-4 py-5 sm:px-7 sm:py-7">
+        <PageHeader title={labels.heading} description={labels.description} compact>
           <button
             type="button"
             onClick={() => loadTracking()}
             disabled={loading || refreshing}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-slate-300 hover:bg-white/10 disabled:opacity-50"
+            className="control"
           >
             <RefreshCw
               size={17}
@@ -795,13 +831,13 @@ export default function LiveTrackingPage() {
             />
             Refresh
           </button>
-        </div>
+        </PageHeader>
 
         {/* Errors */}
         {error && (
           <div
             role="alert"
-            className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400"
+            className="mb-6 flex items-center gap-3 rounded-xl border border-negative-line bg-negative-soft p-4 text-sm text-negative"
           >
             <CircleAlert size={18} />
             {error}
@@ -809,7 +845,7 @@ export default function LiveTrackingPage() {
         )}
 
         {/* Statistics */}
-        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3">
           {[
             [
               labels.totalVehicles,
@@ -826,51 +862,147 @@ export default function LiveTrackingPage() {
           ].map(([label, value]) => (
             <div
               key={label}
-              className="rounded-2xl border border-white/10 bg-[#111827] p-5"
+              className="rounded-panel border border-line bg-panel px-3 py-2 shadow-panel sm:flex sm:items-center sm:justify-between"
             >
-              <p className="text-sm text-slate-400">
+              <p className="text-xs text-muted sm:text-sm">
                 {label}
               </p>
 
-              <p className="mt-3 text-3xl font-bold">
+              <p className="text-xl font-semibold tabular-nums">
                 {loading || error ? "—" : value}
               </p>
             </div>
           ))}
         </div>
 
-        {positionError && <p role="status" className="mb-4 text-sm text-amber-300">{positionError}</p>}
+        {positionError && <p role="status" className="mb-4 text-sm text-caution">{positionError}</p>}
         {/* Vehicle List + Map */}
-        <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <div className={`grid items-start gap-4 ${listOpen ? "xl:grid-cols-[minmax(0,1fr)_minmax(17rem,21rem)]" : ""}`}>
+          {/* Map */}
+          <section className="min-w-0 overflow-hidden rounded-panel border border-line bg-panel shadow-panel">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
+              <div className="flex items-center gap-2">
+                <MapPin
+                  size={18}
+                  className="text-accent"
+                />
+
+                <h2 className="font-semibold">
+                  {labels.mapTitle}
+                </h2>
+              </div>
+
+              <span className="text-xs text-subtle">
+                <Clock3
+                  size={13}
+                  className="mr-1 inline"
+                />
+                15-second refresh
+              </span>
+            </div>
+
+            {/* Map Controls */}
+            <div className="fleet-map-toolbar flex flex-wrap items-center gap-2 border-b border-line p-2.5">
+              <button
+                type="button"
+                onClick={handleShowAll}
+                disabled={locatedVehicles.length === 0}
+                className="control"
+              >
+                <Users size={15} />
+                Show All
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRecenter}
+                disabled={!selectedHasPosition}
+                className="control"
+              >
+                <Crosshair size={15} />
+                Recenter
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleMapType}
+                aria-label="Toggle map and satellite view"
+                aria-pressed={mapType === "satellite"}
+                className="control"
+              >
+                <Layers size={15} />
+
+                {mapType === "street"
+                  ? "Satellite"
+                  : "Street Map"}
+              </button>
+              <button type="button" className="control" aria-controls="tracking-vehicle-panel" aria-expanded={listOpen}
+                onClick={() => setListOpen((current) => !current)}>
+                {listOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+                {listOpen ? "Hide vehicles" : "Show vehicles"}
+              </button>
+
+              <span className="ml-auto text-xs text-subtle">
+                {positionError ? "GPS unavailable" : `${locatedVehicles.length} located`}
+              </span>
+              {selectedVehicle && <span className="min-w-0 max-w-full truncate rounded-lg bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent"
+                title={getVehicleName(selectedVehicle)}>{getVehicleName(selectedVehicle)}</span>}
+            </div>
+
+            {/* Leaflet Map */}
+            <div className="fleet-map relative isolate h-[clamp(19rem,53dvh,46rem)] xl:h-[clamp(34rem,68dvh,64rem)]" data-layer={mapType}>
+              <MapContainer
+                center={DEFAULT_CENTER}
+                zoom={11}
+                scrollWheelZoom
+                className="h-full w-full"
+              >
+                {mapType === "street" ? (
+                  <TileLayer
+                    key="street"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url={STREET_TILES}
+                  />
+                ) : (
+                  <TileLayer
+                    key="satellite"
+                    attribution="Tiles &copy; Esri and its imagery providers"
+                    url={SATELLITE_TILES}
+                    maxZoom={19}
+                  />
+                )}
+
+                <MapController
+                  locatedVehicles={locatedVehicles}
+                  selectedVehicle={selectedVehicle}
+                  focusRequest={focusRequest}
+                  showAllRequest={showAllRequest}
+                />
+
+                {locatedVehicles.map((vehicle) => <VehicleMarker key={vehicle.id} vehicle={vehicle}
+                  selected={selectedVehicle?.id === vehicle.id} onSelect={selectVehicle} />)}
+              </MapContainer>
+
+              {!loading &&
+                !error &&
+                locatedVehicles.length === 0 && (
+                  <div className="pointer-events-none absolute bottom-5 left-1/2 z-[500] w-[90%] max-w-md -translate-x-1/2 rounded-xl border border-line bg-panel p-4 text-center text-sm text-secondary shadow-xl">
+                    {positionError || (hasFleetFilters ? "No GPS positions match the selected filters." : labels.noPositions)}
+                  </div>
+                )}
+            </div>
+          </section>
           {/* Sidebar */}
-          <div className="min-w-0">
-            <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#111827]">
-              <div className="border-b border-white/10 p-5">
-                <h3 className="font-bold">
-                  {labels.vehicleList}
-                </h3>
-
-                <div className="relative mt-4">
-                  <Search
-                    size={16}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
-                  />
-
-                  <input
-                    type="search"
-                    value={search}
-                    onChange={(event) =>
-                      setSearch(event.target.value)
-                    }
-                    placeholder={labels.searchPlaceholder}
-                    className="w-full rounded-xl border border-white/10 bg-[#0b1220] py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-500"
-                  />
-                </div>
+          <div id="tracking-vehicle-panel" className={listOpen ? "min-w-0" : "hidden"}>
+            <section className="overflow-hidden rounded-panel border border-line bg-panel shadow-panel">
+              <div className="border-b border-line p-3.5">
+                <h2 className="mb-2 font-semibold">{labels.vehicleList}</h2>
+                <SearchField label="Search tracking vehicles" placeholder={labels.searchPlaceholder} value={search} onChange={setSearch} />
                 {isBusiness && (
                   <div className="mt-3 grid gap-2">
                     <FleetGroupFilter vehicles={trackedVehicles} value={activeGroup} onChange={setGroupFilter} />
                     <select aria-label="GPS status" value={gpsFilter} onChange={(event) => setGpsFilter(event.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-sm">
+                      className="field-control">
                       <option value="">All GPS statuses</option>
                       <option value="online">Online</option>
                       <option value="offline">Offline</option>
@@ -878,7 +1010,7 @@ export default function LiveTrackingPage() {
                     </select>
                     <select aria-label="Position availability" value={positionFilter} disabled={Boolean(positionError)}
                       onChange={(event) => setPositionFilter(event.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-[#0b1220] px-3 py-2 text-sm disabled:opacity-50">
+                      className="field-control disabled:opacity-50">
                       <option value="">All vehicle locations</option>
                       <option value="located">With GPS position</option>
                       <option value="missing">Without GPS position</option>
@@ -887,22 +1019,16 @@ export default function LiveTrackingPage() {
                 )}
               </div>
 
-              <div className="max-h-[600px] overflow-y-auto p-3">
+              <div className="max-h-[22rem] overflow-y-auto p-2.5 xl:max-h-[47dvh]">
                 {loading ? (
-                  <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-400">
-                    <LoaderCircle
-                      size={18}
-                      className="animate-spin"
-                    />
-                    Loading...
-                  </div>
+                  <StateNotice loading>Loading vehicles…</StateNotice>
                 ) : error ? (
-                  <p className="py-12 text-center text-sm text-slate-500">
+                  <p className="py-12 text-center text-sm text-subtle">
                     Unable to display vehicles.
                     Try Refresh.
                   </p>
                 ) : filteredVehicles.length === 0 ? (
-                  <p className="py-12 px-3 text-center text-sm text-slate-500">
+                  <p className="py-12 px-3 text-center text-sm text-subtle">
                     {hasFleetFilters
                       ? "No vehicles match your filters."
                       : search.trim() ? labels.noSearchResults : labels.emptyVehicles}
@@ -935,142 +1061,6 @@ export default function LiveTrackingPage() {
             )}
           </div>
 
-          {/* Map */}
-          <section className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#111827]">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <MapPin
-                  size={18}
-                  className="text-blue-400"
-                />
-
-                <h3 className="font-bold">
-                  {labels.mapTitle}
-                </h3>
-              </div>
-
-              <span className="text-xs text-slate-500">
-                <Clock3
-                  size={13}
-                  className="mr-1 inline"
-                />
-                15-second refresh
-              </span>
-            </div>
-
-            {/* Map Controls */}
-            <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-3">
-              <button
-                type="button"
-                onClick={handleShowAll}
-                disabled={locatedVehicles.length === 0}
-                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Users size={15} />
-                Show All
-              </button>
-
-              <button
-                type="button"
-                onClick={handleRecenter}
-                disabled={!selectedHasPosition}
-                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Crosshair size={15} />
-                Recenter
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleMapType}
-                aria-label="Toggle map and satellite view"
-                aria-pressed={mapType === "satellite"}
-                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10"
-              >
-                <Layers size={15} />
-
-                {mapType === "street"
-                  ? "Satellite"
-                  : "Street Map"}
-              </button>
-
-              <span className="ml-auto text-xs text-slate-500">
-                {positionError ? "GPS unavailable" : `${locatedVehicles.length} located`}
-              </span>
-            </div>
-
-            {/* Leaflet Map */}
-            <div className="relative h-[600px]">
-              <MapContainer
-                center={DEFAULT_CENTER}
-                zoom={11}
-                scrollWheelZoom
-                className="h-full w-full"
-              >
-                {mapType === "street" ? (
-                  <TileLayer
-                    key="street"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    url={STREET_TILES}
-                  />
-                ) : (
-                  <TileLayer
-                    key="satellite"
-                    attribution="Tiles &copy; Esri and its imagery providers"
-                    url={SATELLITE_TILES}
-                    maxZoom={19}
-                  />
-                )}
-
-                <MapController
-                  locatedVehicles={locatedVehicles}
-                  selectedVehicle={selectedVehicle}
-                  focusRequest={focusRequest}
-                  showAllRequest={showAllRequest}
-                />
-
-                {locatedVehicles.map((vehicle) => (
-                  <CircleMarker
-                    key={vehicle.id}
-                    center={[
-                      vehicle.position.latitude,
-                      vehicle.position.longitude,
-                    ]}
-                    radius={9}
-                    pathOptions={{
-                      color:
-                        vehicle.gpsStatus === "online"
-                          ? "#10b981"
-                          : "#f59e0b",
-                      fillOpacity: 0.9,
-                    }}
-                    eventHandlers={{
-                      click: () =>
-                        selectVehicle(vehicle),
-                    }}
-                  >
-                    <Tooltip direction="top">
-                      {getVehicleName(vehicle)}
-                    </Tooltip>
-
-                    <Popup>
-                      <VehicleMapPopup
-                        vehicle={vehicle}
-                      />
-                    </Popup>
-                  </CircleMarker>
-                ))}
-              </MapContainer>
-
-              {!loading &&
-                !error &&
-                locatedVehicles.length === 0 && (
-                  <div className="pointer-events-none absolute bottom-5 left-1/2 z-[500] w-[90%] max-w-md -translate-x-1/2 rounded-xl border border-white/10 bg-[#111827]/95 p-4 text-center text-sm text-slate-300 shadow-xl">
-                    {positionError || (hasFleetFilters ? "No GPS positions match the selected filters." : labels.noPositions)}
-                  </div>
-                )}
-            </div>
-          </section>
         </div>
       </main>
     </TenantLayout>

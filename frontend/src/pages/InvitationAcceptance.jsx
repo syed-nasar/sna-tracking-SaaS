@@ -16,7 +16,7 @@ import {
 import api from "../services/api";
 
 const inputClass =
-  "w-full rounded-xl border border-white/10 bg-[#0b1220] px-4 py-3 text-sm text-white outline-none transition focus:border-blue-500";
+  "w-full rounded-xl border border-line bg-field px-4 py-3 text-sm text-ink outline-none transition focus:border-accent-line";
 
 export default function InvitationAcceptance() {
   const navigate = useNavigate();
@@ -109,9 +109,9 @@ export default function InvitationAcceptance() {
 
   if (success) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#090d16] px-5 py-12 text-white">
-        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#111827] p-8 text-center">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400">
+      <main className="flex min-h-screen items-center justify-center bg-canvas px-5 py-12 text-ink">
+        <div className="w-full max-w-md rounded-panel border border-line bg-panel p-8 text-center">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-panel bg-positive-soft text-positive">
             <CheckCircle2 size={34} />
           </div>
 
@@ -119,7 +119,7 @@ export default function InvitationAcceptance() {
             Account Activated
           </h1>
 
-          <p className="mt-4 text-sm leading-6 text-slate-400">
+          <p className="mt-4 text-sm leading-6 text-muted">
             Your administrator account has been activated
             successfully. You can now sign in using your
             company slug, email, and new password.
@@ -128,7 +128,7 @@ export default function InvitationAcceptance() {
           <button
             type="button"
             onClick={() => navigate("/login")}
-            className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold transition hover:bg-blue-500"
+            className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-action px-5 py-3.5 text-sm font-semibold transition hover:bg-action-hover"
           >
             Continue to Tenant Login
             <ArrowRight size={17} />
@@ -139,10 +139,10 @@ export default function InvitationAcceptance() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#090d16] px-5 py-12 text-white">
+    <main className="flex min-h-screen items-center justify-center bg-canvas px-5 py-12 text-ink">
       <div className="w-full max-w-lg">
         <div className="mb-8 flex items-center justify-center gap-3">
-          <div className="rounded-xl bg-blue-600 p-3">
+          <div className="rounded-xl bg-action p-3">
             <Truck size={25} />
           </div>
 
@@ -150,15 +150,15 @@ export default function InvitationAcceptance() {
             <h1 className="text-lg font-bold">
               SNA Fleet
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted">
               Fleet Management Platform
             </p>
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-[#111827] p-7 sm:p-9">
+        <div className="rounded-panel border border-line bg-panel p-7 sm:p-9">
           <div className="mb-7">
-            <div className="mb-5 inline-flex rounded-xl bg-blue-500/10 p-3 text-blue-400">
+            <div className="mb-5 inline-flex rounded-xl bg-accent-soft p-3 text-accent">
               <KeyRound size={24} />
             </div>
 
@@ -166,7 +166,7 @@ export default function InvitationAcceptance() {
               Activate Your Account
             </h2>
 
-            <p className="mt-3 text-sm leading-6 text-slate-400">
+            <p className="mt-3 text-sm leading-6 text-muted">
               Enter your invitation token and create a
               password to activate your Tenant Administrator
               account.
@@ -176,7 +176,7 @@ export default function InvitationAcceptance() {
           {error && (
             <div
               role="alert"
-              className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400"
+              className="mb-6 rounded-xl border border-negative-line bg-negative-soft p-4 text-sm text-negative"
             >
               {error}
             </div>
@@ -186,7 +186,7 @@ export default function InvitationAcceptance() {
             <div>
               <label
                 htmlFor="token"
-                className="mb-2 block text-sm font-medium text-slate-300"
+                className="mb-2 block text-sm font-medium text-secondary"
               >
                 Invitation Token
               </label>
@@ -204,7 +204,7 @@ export default function InvitationAcceptance() {
                 className={`${inputClass} resize-none break-all font-mono text-xs`}
               />
 
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-2 text-xs text-subtle">
                 Invitation tokens expire after 24 hours
                 and can only be used once.
               </p>
@@ -213,7 +213,7 @@ export default function InvitationAcceptance() {
             <div>
               <label
                 htmlFor="password"
-                className="mb-2 block text-sm font-medium text-slate-300"
+                className="mb-2 block text-sm font-medium text-secondary"
               >
                 New Password
               </label>
@@ -240,7 +240,7 @@ export default function InvitationAcceptance() {
                       ? "Hide password"
                       : "Show password"
                   }
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-subtle hover:text-ink"
                 >
                   {showPassword ? (
                     <EyeOff size={19} />
@@ -254,7 +254,7 @@ export default function InvitationAcceptance() {
             <div>
               <label
                 htmlFor="confirmPassword"
-                className="mb-2 block text-sm font-medium text-slate-300"
+                className="mb-2 block text-sm font-medium text-secondary"
               >
                 Confirm Password
               </label>
@@ -273,13 +273,13 @@ export default function InvitationAcceptance() {
               />
             </div>
 
-            <div className="flex items-start gap-3 rounded-xl border border-blue-500/15 bg-blue-500/5 p-4">
+            <div className="flex items-start gap-3 rounded-xl border border-accent-line bg-accent-soft p-4">
               <ShieldCheck
                 size={19}
-                className="mt-0.5 shrink-0 text-blue-400"
+                className="mt-0.5 shrink-0 text-accent"
               />
 
-              <p className="text-xs leading-5 text-slate-400">
+              <p className="text-xs leading-5 text-muted">
                 Your password will be submitted securely
                 to the local API for hashing and storage.
                 For production, use HTTPS.
@@ -289,7 +289,7 @@ export default function InvitationAcceptance() {
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex w-full items-center justify-center gap-3 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-3 rounded-xl bg-action px-5 py-3.5 text-sm font-semibold transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? (
                 <LoaderCircle
@@ -306,10 +306,10 @@ export default function InvitationAcceptance() {
             </button>
           </form>
 
-          <div className="mt-7 border-t border-white/10 pt-6 text-center">
+          <div className="mt-7 border-t border-line pt-6 text-center">
             <Link
               to="/login"
-              className="text-sm text-blue-400 transition hover:text-blue-300"
+              className="text-sm text-accent transition hover:text-accent"
             >
               Already activated? Sign In
             </Link>

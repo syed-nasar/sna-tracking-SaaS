@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import TenantLayout from "../components/TenantLayout";
+import ThemeSelector from "../components/ThemeSelector";
 import { useAuth } from "../context/AuthContext";
 import { tenantApi } from "../services/api";
 
-const inputClass = "w-full rounded-lg border border-white/15 bg-[#090d16] px-3 py-2 text-white";
-const panelClass = "space-y-4 rounded-xl border border-white/10 bg-[#0d1422] p-5";
-const buttonClass = "rounded-lg bg-blue-600 px-4 py-2 font-semibold disabled:opacity-50";
+const inputClass = "w-full rounded-lg border border-line-strong bg-canvas px-3 py-2 text-ink";
+const panelClass = "space-y-4 rounded-xl border border-line bg-panel p-5";
+const buttonClass = "rounded-lg bg-action px-4 py-2 font-semibold disabled:opacity-50";
 
 export default function AccountPage() {
   const { session, logout, refreshTenantProfile } = useAuth();
@@ -84,7 +85,11 @@ export default function AccountPage() {
     <TenantLayout title={title}>
       <main className="mx-auto max-w-5xl space-y-6 p-5 sm:p-8">
         <h1 className="text-2xl font-bold">{title}</h1>
-        {loadError && <p role="alert" className="text-red-300">{loadError}</p>}
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-panel border border-line bg-panel p-4 shadow-panel">
+          <h2 className="font-semibold">Display preferences</h2>
+          <ThemeSelector showLabel />
+        </section>
+        {loadError && <p role="alert" className="text-negative">{loadError}</p>}
         {!account && !loadError && <p role="status">Loading account…</p>}
         {account && (
           <div className="grid gap-6 lg:grid-cols-2">
@@ -93,12 +98,12 @@ export default function AccountPage() {
               <dl className="space-y-3 text-sm">
                 {isBusiness && (
                   <>
-                    <div><dt className="text-slate-400">Company</dt><dd className="break-words">{session.profile.tenantName}</dd></div>
-                    <div><dt className="text-slate-400">Company slug</dt><dd className="break-words">{session.profile.tenantSlug ?? account.tenantSlug}</dd></div>
+                    <div><dt className="text-muted">Company</dt><dd className="break-words">{session.profile.tenantName}</dd></div>
+                    <div><dt className="text-muted">Company slug</dt><dd className="break-words">{session.profile.tenantSlug ?? account.tenantSlug}</dd></div>
                   </>
                 )}
-                <div><dt className="text-slate-400">Email</dt><dd className="break-all">{session.profile.email}</dd></div>
-                <div><dt className="text-slate-400">Role</dt><dd className="capitalize">{session.profile.role.replaceAll("_", " ")}</dd></div>
+                <div><dt className="text-muted">Email</dt><dd className="break-all">{session.profile.email}</dd></div>
+                <div><dt className="text-muted">Role</dt><dd className="capitalize">{session.profile.role.replaceAll("_", " ")}</dd></div>
               </dl>
               <label className="block space-y-1">
                 <span>Full name</span>
@@ -110,14 +115,14 @@ export default function AccountPage() {
               </button>
               {profileResult && (
                 <p role={profileResult.success ? "status" : "alert"}
-                  className={profileResult.success ? "text-green-300" : "text-red-300"}>
+                  className={profileResult.success ? "text-positive" : "text-negative"}>
                   {profileResult.message}
                 </p>
               )}
             </form>
             <form className={panelClass} onSubmit={changePassword}>
               <h2 className="text-lg font-semibold">Change password</h2>
-              <p className="text-sm text-slate-400">Changing your password signs you out of all sessions.</p>
+              <p className="text-sm text-muted">Changing your password signs you out of all sessions.</p>
               <fieldset disabled={savingPassword} className="space-y-4">
                 <label className="block space-y-1">
                   <span>Current password</span>
@@ -133,7 +138,7 @@ export default function AccountPage() {
                 </label>
                 <button className={buttonClass}>{savingPassword ? "Changing…" : "Change password"}</button>
               </fieldset>
-              {passwordError && <p role="alert" className="text-red-300">{passwordError}</p>}
+              {passwordError && <p role="alert" className="text-negative">{passwordError}</p>}
             </form>
           </div>
         )}

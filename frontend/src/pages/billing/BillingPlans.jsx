@@ -28,7 +28,7 @@ function PlanDetails({ plan,onChanged }) {
       <Input name="description" label="Description" value={plan.description} maxLength={1000} />
       <Button primary disabled={write.busy}>Save plan details</Button>
     </form>}
-    {publishing && !plan.archived_at && <form className="space-y-3 border-t border-white/10 pt-4" onSubmit={(event) => {
+    {publishing && !plan.archived_at && <form className="space-y-3 border-t border-line pt-4" onSubmit={(event) => {
       event.preventDefault();
       const value = dataFrom(event);
       value.features = value.features.split(",").map((feature) => feature.trim()).filter(Boolean);
@@ -53,10 +53,10 @@ function PlanDetails({ plan,onChanged }) {
     </form>}
     <h3 className="font-semibold">Published versions</h3>
     <ReadState {...result} empty={result.data?.data.length===0} />
-    <ul className="divide-y divide-white/10 text-sm">
+    <ul className="divide-y divide-line text-sm">
       {result.data?.data.map((version) => <li className="space-y-1 break-words py-2" key={version.id}>
         <p>{version.effective_on} · {money(version.base_price,version.currency)} / {version.interval_months} month(s)</p>
-        <p className="text-slate-400">{version.included_devices} included · {money(version.excess_price,version.currency)} per extra device</p>
+        <p className="text-muted">{version.included_devices} included · {money(version.excess_price,version.currency)} per extra device</p>
       </li>)}
     </ul>
     <Pagination result={result.data} offset={offset} onChange={setOffset} />
@@ -85,7 +85,7 @@ export default function BillingPlans() {
         <Button>Search</Button>
       </form>
       <Feedback {...write} />
-      {creating && <form className="space-y-3 border-y border-white/10 py-4" onSubmit={(event) => {
+      {creating && <form className="space-y-3 border-y border-line py-4" onSubmit={(event) => {
         event.preventDefault();
         void write.submit("post","/plans",dataFrom(event),(record) => {
           setCreating(false);setSelected(record.id);setQuery({ offset:0 });
@@ -99,11 +99,11 @@ export default function BillingPlans() {
           <Button type="button" onClick={() => setCreating(false)}>Cancel</Button></div>
       </form>}
       <ReadState {...result} empty={result.data?.data.length===0} />
-      <ul className="divide-y divide-white/10">
+      <ul className="divide-y divide-line">
         {result.data?.data.map((record) => <li key={record.id} className="py-2">
-          <button className="w-full break-words text-left font-semibold hover:text-blue-300"
+          <button className="w-full break-words text-left font-semibold hover:text-accent"
             onClick={() => { setSelected(record.id);setCreating(false); }}>{record.name}</button>
-          <p className="text-sm text-slate-400">{record.code} · {record.audience}{record.archived_at ? " · Archived" : ""}</p>
+          <p className="text-sm text-muted">{record.code} · {record.audience}{record.archived_at ? " · Archived" : ""}</p>
         </li>)}
       </ul>
       <Pagination result={result.data} offset={query.offset} onChange={(offset) => setQuery({ ...query,offset })} />
