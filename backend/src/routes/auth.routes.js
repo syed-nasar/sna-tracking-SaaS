@@ -42,7 +42,9 @@ function createAccessToken(user) {
   }
 
   return jwt.sign(
-    {},
+    {
+      tokenVersion: user.token_version,
+    },
     process.env.JWT_SECRET,
     {
       algorithm: "HS256",
@@ -106,8 +108,7 @@ router.post("/login", loginLimiter, async (req, res) => {
 
     const normalizedEmail = email.trim();
 
-    // Business/tenant login:
-    // The supplied slug determines the tenant.
+    // Business login: tenant slug determines the tenant.
     if (hasTenantSlug) {
       const result = await pool.query(
         `SELECT
@@ -118,6 +119,7 @@ router.post("/login", loginLimiter, async (req, res) => {
            u.password_hash,
            u.role,
            u.is_active,
+           u.token_version,
            t.name AS tenant_name,
            t.status AS tenant_status,
            t.customer_type
@@ -149,9 +151,7 @@ router.post("/login", loginLimiter, async (req, res) => {
       return res.json(buildLoginResponse(user));
     }
 
-    // Personal login:
-    // No tenant slug is supplied.
-    // Only personal tenant accounts are eligible.
+    // Personal login: no tenant slug is supplied.
     const result = await pool.query(
       `SELECT
          u.id,
@@ -161,6 +161,7 @@ router.post("/login", loginLimiter, async (req, res) => {
          u.password_hash,
          u.role,
          u.is_active,
+         u.token_version,
          t.name AS tenant_name,
          t.status AS tenant_status,
          t.customer_type
@@ -174,8 +175,6 @@ router.post("/login", loginLimiter, async (req, res) => {
 
     const candidates = result.rows;
 
-    // Always perform a password comparison, even when
-    // no account exists, to reduce timing differences.
     if (candidates.length === 0) {
       await bcrypt.compare(password, fallbackHash);
 
@@ -197,8 +196,6 @@ router.post("/login", loginLimiter, async (req, res) => {
         candidate.tenant_status === "active"
     );
 
-    // Do not select an arbitrary tenant if more than
-    // one personal account matches these credentials.
     if (matches.length !== 1) {
       return res.status(401).json({
         message: loginFailureMessage,
@@ -219,8 +216,7 @@ router.post("/login", loginLimiter, async (req, res) => {
 router.get("/me", requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT
-         customer_type
+      `SELECT customer_type
        FROM tenants
        WHERE id = $1`,
       [req.auth.tenantId]
@@ -242,7 +238,10 @@ router.get("/me", requireAuth, async (req, res) => {
       customerType: tenant.customer_type,
     });
   } catch (error) {
-    console.error("Get authenticated user error:", error.message);
+    console.error(
+      "Get authenticated user error:",
+      error.message
+    );
 
     return res.status(500).json({
       message: "Unable to retrieve authenticated user",

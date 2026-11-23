@@ -13,19 +13,28 @@ async function requireAuth(req, res, next) {
   }
 
   try {
-    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+    if (
+      !process.env.JWT_SECRET ||
+      process.env.JWT_SECRET.length < 32
+    ) {
       throw new Error("JWT_SECRET is not configured securely");
     }
 
-    const payload = jwt.verify(match[1], process.env.JWT_SECRET, {
-      algorithms: ["HS256"],
-      issuer: "sna-fleet-api",
-      audience: "sna-fleet-users",
-    });
+    const payload = jwt.verify(
+      match[1],
+      process.env.JWT_SECRET,
+      {
+        algorithms: ["HS256"],
+        issuer: "sna-fleet-api",
+        audience: "sna-fleet-users",
+      }
+    );
 
     if (
       typeof payload.sub !== "string" ||
-      !/^[1-9]\d*$/.test(payload.sub)
+      !/^[1-9]\d*$/.test(payload.sub) ||
+      !Number.isSafeInteger(payload.tokenVersion) ||
+      payload.tokenVersion < 0
     ) {
       return res.status(401).json({
         message: "Invalid authentication token",
@@ -40,6 +49,7 @@ async function requireAuth(req, res, next) {
          u.email,
          u.role,
          u.is_active,
+         u.token_version,
          t.status AS tenant_status
        FROM users u
        JOIN tenants t ON t.id = u.tenant_id
@@ -56,6 +66,12 @@ async function requireAuth(req, res, next) {
     ) {
       return res.status(403).json({
         message: "Account or company is inactive",
+      });
+    }
+
+    if (payload.tokenVersion !== user.token_version) {
+      return res.status(401).json({
+        message: "Session expired. Please log in again.",
       });
     }
 
