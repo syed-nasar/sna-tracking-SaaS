@@ -2,6 +2,7 @@
 const express = require("express");
 const crypto = require("node:crypto");
 const pool = require("../config/db");
+const { lockReseller,audit } = require("../services/resellers");
 const { configStatus, queueInvitation, manualInvitation } = require("../services/company-invitation-email");
 const {
   requirePlatformAuth,
@@ -27,15 +28,17 @@ function parseId(value) {
 }
 
 const latestInvitation = `SELECT i.id,i.expires_at,i.used_at,
-  i.created_at>clock_timestamp()-interval '60 seconds' AS recently_issued,
+  i.created_at>clock_timestamp()-interval '60 seconds' AS recently_issued,r.slug AS reseller_slug,
   u.id AS user_id,u.is_active,u.role,t.status AS tenant_status,t.customer_type,d.status AS delivery_status
   FROM user_invitations i JOIN users u ON u.id=i.user_id AND u.tenant_id=i.tenant_id
-  JOIN tenants t ON t.id=i.tenant_id LEFT JOIN company_invitation_email d ON d.invitation_id=i.id
-  WHERE i.tenant_id=$1 AND i.user_id=(SELECT user_id FROM user_invitations WHERE tenant_id=$1 ORDER BY id LIMIT 1)
+  JOIN tenants t ON t.id=i.tenant_id LEFT JOIN resellers r ON r.id=t.reseller_id
+  LEFT JOIN company_invitation_email d ON d.invitation_id=i.id
+  WHERE i.tenant_id=$1 AND ($2::bigint IS NULL OR t.reseller_id=$2)
+    AND i.user_id=(SELECT user_id FROM user_invitations WHERE tenant_id=$1 ORDER BY id LIMIT 1)
   ORDER BY i.id DESC LIMIT 1`;
 
 function summarize(row) {
-  const availability = row.customer_type === "business" ? configStatus() : "manual";
+  const availability = row.customer_type === "business" || row.reseller_slug ? configStatus() : "manual";
   return {
     id:row.id,
     expiresAt:row.expires_at,
@@ -46,18 +49,17 @@ function summarize(row) {
   };
 }
 
-router.get("/:tenantId/invitations/status",async(req,res)=>{
+async function invitationStatus(req,res){
   const tenantId = parseId(req.params.tenantId);
   if (!tenantId) return res.status(400).json({message:"Invalid tenant ID"});
-  const {rows:[row]} = await pool.query(latestInvitation,[tenantId]);
+  const {rows:[row]} = await pool.query(latestInvitation,[tenantId,req.resellerAuth?.resellerId??null]);
   res.set("Cache-Control","no-store");
   return res.json({invitation:row ? summarize(row) : null});
-});
+}
+router.get("/:tenantId/invitations/status",invitationStatus);
 
 // POST /api/platform/tenants/:tenantId/invitations/reissue
-router.post(
-  "/:tenantId/invitations/reissue",
-  async (req, res) => {
+async function reissue(req,res) {
     const tenantId = parseId(req.params.tenantId);
 
     if (!tenantId) {
@@ -78,14 +80,16 @@ router.post(
     try {
       client = await pool.connect();
       await client.query("BEGIN");
+      if(req.resellerAuth)await lockReseller(client,req.resellerAuth);
+      const scope=[tenantId,req.resellerAuth?.resellerId??null];
 
       // Lock the tenant to serialize invitation reissues.
       const tenantResult = await client.query(
         `SELECT id, name, slug, status, customer_type
          FROM tenants
-         WHERE id = $1
+         WHERE id = $1 AND ($2::bigint IS NULL OR reseller_id=$2)
          FOR UPDATE`,
-        [tenantId]
+        scope
       );
 
       if (tenantResult.rows.length === 0) {
@@ -106,9 +110,9 @@ router.post(
         });
       }
 
-      const {rows:[candidate]} = await client.query(latestInvitation,[tenantId]);
+      const {rows:[candidate]} = await client.query(latestInvitation,scope);
       if (candidate) await client.query("SELECT invitation_id FROM company_invitation_email WHERE invitation_id=$1 FOR UPDATE",[candidate.id]);
-      const {rows:[latest]} = await client.query(latestInvitation,[tenantId]);
+      const {rows:[latest]} = await client.query(latestInvitation,scope);
       if (!latest || latest.used_at || latest.is_active || latest.role!=="tenant_admin") {
         await client.query("ROLLBACK");
         return res.status(409).json({message:"No open initial administrator invitation"});
@@ -170,28 +174,30 @@ router.post(
              user_id,
              token_hash,
              expires_at,
-             created_by_platform_admin_id
+             created_by_platform_admin_id,created_by_reseller_admin_id
            )
          VALUES (
            $1,
            $2,
            $3,
            NOW() + INTERVAL '24 hours',
-           $4
+           $4,$5
          )
          RETURNING id, expires_at`,
         [
           tenantId,
           administrator.id,
           tokenHash,
-          req.platformAuth.adminId,
+          req.platformAuth?.adminId??null,
+          req.resellerAuth?.id??null,
         ]
       );
 
       const invitation = invitationResult.rows[0];
-      const deliveryStatus = await queueInvitation(client,invitation.id,token,tenant.customer_type==="business");
+      const deliveryStatus = await queueInvitation(client,invitation.id,token,tenant.customer_type==="business"||Boolean(latest.reseller_slug));
 
-      await client.query(
+      if(req.resellerAuth)await audit(client,req.resellerAuth.resellerId,{resellerAdminId:req.resellerAuth.id},"customer.invitation_reissued",invitation.id);
+      else await client.query(
         `INSERT INTO platform_audit_logs
            (
              platform_admin_id,
@@ -231,7 +237,7 @@ router.post(
           id: invitation.id,
           expiresAt: invitation.expires_at,
           deliveryStatus,
-          ...manualInvitation(token),
+          ...manualInvitation(token,latest.reseller_slug),
         },
       };
 
@@ -249,6 +255,7 @@ router.post(
         }
       }
 
+      if(error.status)return res.status(error.status).json({message:error.message});
       console.error(
         "Reissue invitation failed:",
         error.message
@@ -262,7 +269,9 @@ router.post(
         client.release();
       }
     }
-  }
-);
+}
+router.post("/:tenantId/invitations/reissue",reissue);
 
 module.exports = router;
+module.exports.invitationStatus=invitationStatus;
+module.exports.reissue=reissue;

@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const pool = require("../config/db");
+const { sendBranded } = require("./brand-mail");
 const { smtpEnabled, transport, deliveryFailure } = require("./mail");
 
 function frontendUrl() {
@@ -24,9 +25,10 @@ function configStatus() {
   return frontendUrl() && key() ? "ready" : "configuration_required";
 }
 
-function activationLink(token) {
+function activationLink(token, brandSlug, resellerAdmin=false) {
   const url = frontendUrl();
   if (!url) return null;
+  if (brandSlug) url.pathname=url.pathname.replace(/accept-invitation$/, `r/${brandSlug}/${resellerAdmin?"activate-admin":"accept-invitation"}`);
   url.hash = new URLSearchParams({token}).toString();
   return url.href;
 }
@@ -50,7 +52,10 @@ function unprotect(payload,id) {
 async function audit(db, id, action, status) {
   await db.query(`INSERT INTO platform_audit_logs(platform_admin_id,action,resource_type,resource_id,details)
     SELECT created_by_platform_admin_id,$2,'tenant',tenant_id,jsonb_build_object('invitationId',id,'deliveryStatus',$3::text)
-    FROM user_invitations WHERE id=$1`,[id,action,status]);
+    FROM user_invitations WHERE id=$1 AND created_by_platform_admin_id IS NOT NULL`,[id,action,status]);
+  await db.query(`INSERT INTO reseller_audit(reseller_id,reseller_admin_id,action,target_id)
+    SELECT t.reseller_id,i.created_by_reseller_admin_id,$2,i.id FROM user_invitations i
+      JOIN tenants t ON t.id=i.tenant_id WHERE i.id=$1 AND i.created_by_reseller_admin_id IS NOT NULL`,[id,action]);
 }
 
 async function queueInvitation(db,id,token,business) {
@@ -62,10 +67,14 @@ async function queueInvitation(db,id,token,business) {
   return "pending";
 }
 
-function manualInvitation(token) {
+function manualInvitation(token, brandSlug, resellerAdmin=false) {
   const development = process.env.NODE_ENV === "development" && process.env.ALLOW_DEV_INVITATION_TOKEN === "true";
   if (!development && process.env.ALLOW_MANUAL_INVITATION_TOKEN !== "true") return {};
-  return {manualToken:token,activationLink:activationLink(token),...(development?{developmentToken:token}:{})};
+  const acceptancePath=brandSlug
+    ? `/r/${brandSlug}/${resellerAdmin?"activate-admin":"accept-invitation"}`
+    : "/accept-invitation";
+  return {manualToken:token,acceptancePath,activationLink:activationLink(token,brandSlug,resellerAdmin),
+    ...(development?{developmentToken:token}:{})};
 }
 
 async function recordDelivery(id,status) {
@@ -96,22 +105,24 @@ async function runInvitationDelivery(mail) {
       SELECT invitation_id FROM company_invitation_email WHERE status='pending' AND available_at<=clock_timestamp()
       ORDER BY available_at,invitation_id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING d.*`);
   if (!job) return;
-  const {rows:[recipient]} = await pool.query(`SELECT u.email,u.full_name,t.name,i.expires_at,i.token_hash
+  const {rows:[recipient]} = await pool.query(`SELECT u.email,u.full_name,t.name,i.expires_at,i.token_hash,
+    r.id AS reseller_id,r.slug AS brand_slug,r.display_name AS brand_name,r.support_email
     FROM user_invitations i JOIN tenants t ON t.id=i.tenant_id JOIN users u ON u.id=i.user_id AND u.tenant_id=t.id
+    LEFT JOIN resellers r ON r.id=t.reseller_id
     WHERE i.id=$1 AND i.used_at IS NULL AND i.expires_at>clock_timestamp() AND NOT u.is_active
-      AND u.role='tenant_admin' AND t.status='active' AND t.customer_type='business'`,[job.invitation_id]);
+      AND u.role='tenant_admin' AND t.status='active' AND (t.customer_type='business' OR r.id IS NOT NULL)`,[job.invitation_id]);
   let status = "cancelled";
   if (recipient && /^[^\s,@<>]+@[^\s,@<>]+$/.test(recipient.email)) {
     try {
       const token = unprotect(job.payload,job.invitation_id);
       if (crypto.createHash("sha256").update(token).digest("hex") !== recipient.token_hash) throw new Error("Invalid outbox payload");
-      await mail.sendMail({
+      await sendBranded(mail,recipient.reseller_id,{
         from:process.env.ALERT_SMTP_FROM,
         to:recipient.email,
         messageId:`<company-invitation-${job.invitation_id}@sna-fleet.local>`,
-        subject:"Activate your SNA Fleet Management account",
-        text:`Hello ${recipient.full_name},\n\nYou have been invited to administer ${recipient.name} in SNA Fleet Management. Open the link and choose a password to activate your account.\n\n${activationLink(token)}\n\nThis one-time invitation expires at ${recipient.expires_at.toISOString()} (UTC).\n`,
-      });
+        subject:`Activate your ${recipient.brand_name||"SNA Fleet Management"} account`,
+        text:`Hello ${recipient.full_name},\n\nYou have been invited to administer ${recipient.name} in ${recipient.brand_name||"SNA Fleet Management"}. Open the link and choose a password to activate your account.\n\n${activationLink(token,recipient.brand_slug)}\n\nThis one-time invitation expires at ${recipient.expires_at.toISOString()} (UTC).\n${recipient.support_email?`Support: ${recipient.support_email}\\n`:""}`,
+      },activationLink(token,recipient.brand_slug));
       status = "sent";
     } catch(error) {
       status = deliveryFailure(error,job.attempts);
@@ -136,4 +147,4 @@ function startInvitationEmail() {
   timer.unref();
 }
 
-module.exports = { configStatus, queueInvitation, manualInvitation, runInvitationDelivery, startInvitationEmail };
+module.exports = { configStatus, queueInvitation, manualInvitation, runInvitationDelivery, startInvitationEmail, protect, unprotect, activationLink };

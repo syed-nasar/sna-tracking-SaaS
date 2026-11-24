@@ -39,13 +39,13 @@ function cell(value,key,local,excel=false) {
   if(typeof value==="boolean")return value?"Yes":"No";
   return typeof value==="number"?Number(value.toFixed(6)):safe(String(value));
 }
-function describe(report,local) {
+function describe(report,local,brand) {
   const timezone=report.range.timezone;
   const date=value=>{const {wall,offset}=local(value);return `${wall} ${offset}`;};
   const totals=report.totals;
   const distance=totals.distance==null?"Unavailable":totals.distance.toFixed(3)+" km";
   const values=[
-    ["SNA Fleet Management",title[report.type]],
+    [safe(brand?.display_name||"SNA Fleet Management"),title[report.type]],
     ["Period (start inclusive, end exclusive)",`${date(report.range.from)} to ${date(report.range.to)}`],
     ["Timezone",timezone],["Generated",date(new Date())],
     ["Vehicles",safe(report.vehicles.map(v=>v.registration?`${v.name} (${v.registration})`:v.name).join("; ")||"None")],
@@ -57,7 +57,7 @@ function describe(report,local) {
   return values;
 }
 
-async function exportReport(report,format) {
+async function exportReport(report,format,brand) {
   if(!Object.hasOwn(types,format))reject(400,"Unsupported export format.");
   const limit=format==="pdf"?500:5000;
   if(report.totalRows>limit)reject(413,`This ${format.toUpperCase()} export is limited to ${limit} rows. Shorten the date range or select fewer vehicles.`);
@@ -70,13 +70,17 @@ async function exportReport(report,format) {
     ...base.map(([key])=>cell(row[key],key,local,format==="xlsx")),
     ...excelOffsets.map(([key])=>local(row[key.slice(0,-6)]).offset),
   ]);
-  const metadata=describe(report,local);
+  const metadata=describe(report,local,brand);
+  const hex=brand?.accent_color||brand?.primary_color;
+  const theme=/^#[0-9a-f]{6}$/i.test(hex||"")
+    ? "#"+hex.slice(1).match(/../g).map(x=>Math.floor(parseInt(x,16)*0.45).toString(16).padStart(2,"0")).join("")
+    : "#153F74";
   if(format==="csv"){
     const escape=value=>'"'+String(value??"").replaceAll('"','""')+'"';
     return {type:types.csv,body:Buffer.from("\uFEFF"+[...metadata,[],headers,...rows].map(row=>row.map(escape).join(",")).join("\r\n"))};
   }
   if(format==="xlsx"){
-    const header=label=>({value:label,fontWeight:"bold",color:"#FFFFFF",backgroundColor:"#153F74"});
+    const header=label=>({value:label,fontWeight:"bold",color:"#FFFFFF",backgroundColor:theme});
     const xlsxCell=value=>value==null?null:value instanceof Date?
       {value,type:Date,format:"yyyy-mm-dd hh:mm:ss"}:{value};
     const body=await writeExcel([
@@ -88,10 +92,10 @@ async function exportReport(report,format) {
     ]).toBuffer();
     return {type:types.xlsx,body};
   }
-  return {type:types.pdf,body:await pdf(metadata,headers,rows)};
+  return {type:types.pdf,body:await pdf(metadata,headers,rows,theme,brand?.logo)};
 }
 
-function pdf(metadata,headers,rows) {
+function pdf(metadata,headers,rows,theme,logo) {
   return new Promise((resolve,reject)=>{
     const doc=new PDFDocument({size:"A4",layout:"landscape",margin:30});
     const chunks=[];
@@ -101,7 +105,8 @@ function pdf(metadata,headers,rows) {
     const margin=30,width=doc.page.width-2*margin,column=width/headers.length;
     let y=margin,page=1;
     const heading=()=> {
-      doc.fillColor("#153F74").font("Helvetica-Bold").fontSize(19).text("SNA Fleet Management",margin,y);
+      if(logo) doc.image(logo,doc.page.width-margin-48,y,{fit:[48,38]});
+      doc.fillColor(theme).font("Helvetica-Bold").fontSize(19).text(metadata[0][0],margin,y,{width:width-58});
       doc.fontSize(14).text(metadata[0][1]);
       doc.font("Helvetica").fontSize(8).fillColor("#334155");
       doc.text(`Page ${page}  |  ${metadata[2][1]}  |  Distances in km`);
@@ -114,7 +119,7 @@ function pdf(metadata,headers,rows) {
       if(!header&&y+height>doc.page.height-margin){
         doc.addPage();page++;y=margin;heading();row(headers,true);
       }
-      doc.rect(margin,y,width,height).fill(header?"#153F74":index%2?"#F1F5F9":"#FFFFFF");
+      doc.rect(margin,y,width,height).fill(header?theme:index%2?"#F1F5F9":"#FFFFFF");
       doc.fillColor(header?"#FFFFFF":"#0F172A").font(header?"Helvetica-Bold":"Helvetica");
       values.forEach((value,i)=>doc.text(value,margin+i*column+5,y+5,{width:column-10,lineGap:0}));
       y+=height;

@@ -75,7 +75,11 @@ function buildLoginResponse(user) {
 // POST /api/auth/login
 router.post("/login", loginLimiter, async (req, res) => {
   try {
-    const { tenantSlug, email, password } = req.body || {};
+    const { tenantSlug, resellerSlug, email, password } = req.body || {};
+    if (resellerSlug != null && (typeof resellerSlug !== "string" || resellerSlug.length > 80 ||
+        !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(resellerSlug))) {
+      return res.status(401).json({message:loginFailureMessage});
+    }
 
     const hasTenantSlug =
       tenantSlug !== undefined && tenantSlug !== null;
@@ -126,8 +130,9 @@ router.post("/login", loginLimiter, async (req, res) => {
          FROM users u
          JOIN tenants t ON t.id = u.tenant_id
          WHERE LOWER(u.email) = LOWER($1)
-           AND t.slug = $2`,
-        [normalizedEmail, tenantSlug]
+           AND t.slug = $2 AND ($3::text IS NULL OR EXISTS
+             (SELECT 1 FROM resellers r WHERE r.id=t.reseller_id AND r.slug=$3))`,
+        [normalizedEmail, tenantSlug, resellerSlug??null]
       );
 
       const user = result.rows[0];
@@ -169,8 +174,10 @@ router.post("/login", loginLimiter, async (req, res) => {
        JOIN tenants t ON t.id = u.tenant_id
        WHERE LOWER(u.email) = LOWER($1)
          AND t.customer_type = 'personal'
+         AND (($2::text IS NULL AND t.reseller_id IS NULL) OR EXISTS
+           (SELECT 1 FROM resellers r WHERE r.id=t.reseller_id AND r.slug=$2))
        ORDER BY u.id`,
-      [normalizedEmail]
+      [normalizedEmail,resellerSlug??null]
     );
 
     const candidates = result.rows;

@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 const { smtpEnabled, transport, deliveryFailure } = require("./mail");
+const { sendBranded } = require("./brand-mail");
 
 async function runDelivery(mail) {
   // A process can die after the remote server accepted mail. Record that
@@ -13,18 +14,19 @@ async function runDelivery(mail) {
   const job = rows[0];
   if (!job) return;
   let status = "cancelled";
-  const recipient = (await pool.query(`SELECT u.email,e.type,e.occurred_at FROM users u
+  const recipient = (await pool.query(`SELECT u.email,e.type,e.occurred_at,r.id AS reseller_id,r.display_name,r.support_email FROM users u
     JOIN tenants t ON t.id=u.tenant_id JOIN alert_preferences p ON p.user_id=u.id
     JOIN alert_events e ON e.tenant_id=u.tenant_id AND e.id=$3
+    LEFT JOIN resellers r ON r.id=t.reseller_id
     WHERE u.id=$1 AND u.tenant_id=$2 AND u.is_active AND t.status='active' AND p.email`,
   [job.user_id,job.tenant_id,job.event_id])).rows[0];
   if (recipient && /^[^\s,@<>]+@[^\s,@<>]+$/.test(recipient.email)) {
     try {
-      await mail.sendMail({
+      await sendBranded(mail,recipient.reseller_id,{
         from: process.env.ALERT_SMTP_FROM, to: recipient.email,
         messageId: `<alert-${job.id}@sna-fleet.local>`,
-        subject: "SNA Fleet alert",
-        text: `Alert: ${recipient.type.replaceAll("_"," ")}\nTime (UTC): ${recipient.occurred_at.toISOString()}\nSign in to SNA Fleet to see authorized details.`,
+        subject: `${recipient.display_name||"SNA Fleet"} alert`,
+        text: `Alert: ${recipient.type.replaceAll("_"," ")}\nTime (UTC): ${recipient.occurred_at.toISOString()}\nSign in to ${recipient.display_name||"SNA Fleet"} to see authorized details.${recipient.support_email?"\nSupport: "+recipient.support_email:""}`,
       });
       status = "sent";
     } catch (error) {

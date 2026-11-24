@@ -21,14 +21,15 @@ router.use(invitationLimiter);
 
 // POST /api/auth/invitations/accept
 router.post("/accept", async (req, res) => {
-  const { token, password } = req.body || {};
+  const { token, password, brandSlug } = req.body || {};
 
   if (
     typeof token !== "string" ||
     !/^[a-f0-9]{64}$/.test(token) ||
     typeof password !== "string" ||
     password.length < 12 ||
-    Buffer.byteLength(password, "utf8") > 72
+    Buffer.byteLength(password, "utf8") > 72 ||
+    (brandSlug!=null&&(typeof brandSlug!=="string"||brandSlug.length>80))
   ) {
     return res.status(400).json({
       message: "Invalid invitation or password",
@@ -66,9 +67,12 @@ router.post("/accept", async (req, res) => {
          i.expires_at,
          i.used_at
        FROM user_invitations i
-       WHERE i.token_hash = $1
+       WHERE i.token_hash = $1 AND ($2::text IS NULL OR EXISTS (
+         SELECT 1 FROM tenants t JOIN resellers r ON r.id=t.reseller_id
+         WHERE t.id=i.tenant_id AND r.slug=$2
+       ))
        FOR UPDATE`,
-      [tokenHash]
+      [tokenHash,brandSlug??null]
     );
 
     if (invitationResult.rows.length === 0) {

@@ -6,6 +6,7 @@ const { startDraftScheduler } = require("./services/billing-scheduler");
 const { startAlertWorker } = require("./services/alert-worker");
 const { startAlertEmail } = require("./services/alert-email");
 const { startInvitationEmail } = require("./services/company-invitation-email");
+const { startResellerEmail } = require("./services/reseller-invitations");
 const { startGeofenceSync } = require("./services/alert-geofence-sync");
 
 const PORT = Number(process.env.PORT || 3000);
@@ -19,5 +20,6 @@ app.listen(PORT, HOST, () => {
   startAlertWorker();
   startAlertEmail();
   startInvitationEmail();
+  startResellerEmail();
   startGeofenceSync();
 });

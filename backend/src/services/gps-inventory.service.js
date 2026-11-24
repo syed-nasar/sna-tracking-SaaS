@@ -14,7 +14,7 @@ function fail(status, message) {
 function respondError(res, error) {
   if (error instanceof InventoryError) return res.status(error.status).json({ message: error.message });
   if (error.code === "23505") return res.status(409).json({ message: "The identifier, registration, or device is already in use." });
-  if (error.code === "23503" || error.code === "40P01") {
+  if (error.code === "23503" || error.code === "23514" || error.code === "40P01") {
     return res.status(409).json({ message: "A related record changed. Refresh and try again." });
   }
   console.error("GPS inventory operation failed:", error.code || error.name);
@@ -55,9 +55,9 @@ async function lockTenant(client, tenantId, allowInactive = false) {
 
 async function event(client, deviceId, action, actor, details) {
   await client.query(
-    `INSERT INTO gps_device_events (device_id, action, platform_admin_id, tenant_user_id, details)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [deviceId, action, actor.adminId ?? null, actor.userId ?? null, details]
+    `INSERT INTO gps_device_events (device_id, action, platform_admin_id, tenant_user_id, details,reseller_admin_id)
+     VALUES ($1, $2, $3, $4, $5,$6)`,
+    [deviceId, action, actor.adminId ?? null, actor.userId ?? null, details,actor.resellerAdminId??null]
   );
 }
 
@@ -75,7 +75,7 @@ async function changeState(client, device, lifecycle, tenantId) {
   );
 }
 
-async function changeAllocation({ deviceId, byTraccarId = false, targetTenantId, action, actor }) {
+async function changeAllocation({ deviceId, byTraccarId = false, targetTenantId, action, actor, authorizeAllocation }) {
   return transaction(async (client) => {
     if (targetTenantId) await lockTenant(client, targetTenantId);
     const { rows: [device] } = await client.query(
@@ -83,6 +83,7 @@ async function changeAllocation({ deviceId, byTraccarId = false, targetTenantId,
       [deviceId]
     );
     if (!device) fail(404, "GPS device not found.");
+    if (authorizeAllocation) await authorizeAllocation(client,device);
     const previous = device.tenant_id;
     const lifecycle = device.lifecycle_status;
     if (lifecycle === "installed") fail(409, "Remove the device from its vehicle before changing allocation.");

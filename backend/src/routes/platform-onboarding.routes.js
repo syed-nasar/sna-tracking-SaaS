@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const bcrypt = require("bcryptjs");
 const pool = require("../config/db");
 const { queueInvitation, manualInvitation } = require("../services/company-invitation-email");
+const { lockReseller, audit } = require("../services/resellers");
 
 const {
   requirePlatformAuth,
@@ -44,7 +45,7 @@ function validSlug(value) {
 }
 
 // POST /api/platform/tenants/onboard
-router.post("/", async (req, res) => {
+async function onboard(req, res) {
   const body = req.body;
 
   if (
@@ -126,11 +127,13 @@ router.post("/", async (req, res) => {
 
     client = await pool.connect();
     await client.query("BEGIN");
+    const reseller = req.resellerAuth;
+    if (reseller) await lockReseller(client,reseller);
 
     const tenantResult = await client.query(
       `INSERT INTO tenants
-         (name, slug, email, phone, customer_type)
-       VALUES ($1, $2, $3, $4, $5)
+         (name, slug, email, phone, customer_type, reseller_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING
          id, name, slug, email, phone,
          status, customer_type,
@@ -143,6 +146,7 @@ router.post("/", async (req, res) => {
           : email.trim().toLowerCase(),
         phone === null ? null : phone.trim(),
         customer_type,
+        reseller?.resellerId ?? null,
       ]
     );
 
@@ -186,28 +190,30 @@ router.post("/", async (req, res) => {
            user_id,
            token_hash,
            expires_at,
-           created_by_platform_admin_id
+           created_by_platform_admin_id, created_by_reseller_admin_id
          )
        VALUES (
          $1,
          $2,
          $3,
          NOW() + INTERVAL '24 hours',
-         $4
+           $4, $5
        )
        RETURNING id, expires_at`,
       [
         tenant.id,
         administrator.id,
         tokenHash,
-        req.platformAuth.adminId,
+        req.platformAuth?.adminId ?? null,
+        reseller?.id ?? null,
       ]
     );
 
     const invitation = invitationResult.rows[0];
-    const deliveryStatus = await queueInvitation(client, invitation.id, invitationToken, customer_type === "business");
+    const deliveryStatus = await queueInvitation(client, invitation.id, invitationToken, customer_type === "business" || Boolean(reseller));
 
-    await client.query(
+    if (reseller) await audit(client,reseller.resellerId,{resellerAdminId:reseller.id},"customer.onboarded",tenant.id);
+    else await client.query(
       `INSERT INTO platform_audit_logs
          (
            platform_admin_id,
@@ -242,7 +248,7 @@ router.post("/", async (req, res) => {
         id: invitation.id,
         expiresAt: invitation.expires_at,
         deliveryStatus,
-        ...manualInvitation(invitationToken),
+        ...manualInvitation(invitationToken,reseller?.profile.slug),
       },
     };
 
@@ -261,6 +267,7 @@ router.post("/", async (req, res) => {
       }
     }
 
+    if (error.status) return res.status(error.status).json({message:error.message});
     if (error.code === "23505") {
       return res.status(409).json({
         message: "Tenant slug or user already exists",
@@ -269,7 +276,7 @@ router.post("/", async (req, res) => {
 
     console.error(
       "Tenant onboarding failed:",
-      error.message
+      error.code ?? error.name
     );
 
     return res.status(500).json({
@@ -278,6 +285,8 @@ router.post("/", async (req, res) => {
   } finally {
     if (client) client.release();
   }
-});
+}
+router.post("/",onboard);
 
 module.exports = router;
+module.exports.onboard = onboard;

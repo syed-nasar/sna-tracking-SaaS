@@ -12,6 +12,7 @@ const platformDeviceRoutes = require("./routes/platform-device.routes");
 
 const vehicleRoutes = require("./routes/vehicle.routes");
 const vehicleReports = require("./routes/vehicle-reports.routes");
+const resellerRoutes = require("./routes/resellers.routes");
 const vehicleImageRoutes = require("./routes/vehicle-image.routes");
 
 const userRoutes = require("./routes/user.routes");
@@ -68,6 +69,10 @@ app.use("/api/vehicles", vehicleImageRoutes);
 
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/reports", vehicleReports);
+app.use("/api/platform/resellers", resellerRoutes.platform);
+app.use("/api/reseller", resellerRoutes.reseller);
+app.use("/api/brands", resellerRoutes.publicApi);
+app.use("/api/tenant-brand", resellerRoutes.tenant);
 
 app.use("/api/users", userRoutes);
 app.use("/api/fleet", fleetRoutes);

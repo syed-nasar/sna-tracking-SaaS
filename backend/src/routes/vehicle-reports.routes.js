@@ -4,6 +4,8 @@ const { requireAuth } = require("../middleware/auth.middleware");
 const { authorize } = require("../middleware/authorize.middleware");
 const reports = require("../services/vehicle-reports");
 const { exportReport, types } = require("../services/report-export");
+const pool = require("../config/db");
+const { publicBrand } = require("../services/resellers");
 
 const router=express.Router();
 router.use(requireAuth,authorize("vehicles:read"));
@@ -39,7 +41,13 @@ router.get("/exports/:type/:format",run(async(req,res)=>{
   const filters=reports.parseFilters(req.query);
   const dataset=await reports.fetchDataset(req.auth,filters);
   const report=reports.assemble(dataset,reportType,filters,false);
-  const output=await exportReport(report,req.params.format);
+  const brand=await publicBrand(pool,"tenant",req.auth.tenantId);
+  if(brand&&req.params.format==="pdf") {
+    const {rows:[asset]}=await pool.query(`SELECT a.png FROM reseller_brand_assets a JOIN tenants t ON t.reseller_id=a.reseller_id
+      WHERE t.id=$1 AND a.kind='logo'`,[req.auth.tenantId]);
+    brand.logo=asset?.png;
+  }
+  const output=await exportReport(report,req.params.format,brand);
   await reports.recheck(req.auth,dataset.access);
   res.attachment(`sna-${reportType}.${req.params.format}`).type(output.type).send(output.body);
 }));
