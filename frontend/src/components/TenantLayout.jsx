@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ClipboardList, Cpu, LayoutDashboard, MapPinned, Receipt, Truck, UserRound, Users } from "lucide-react";
+import { ChartNoAxesCombined, ClipboardList, Cpu, LayoutDashboard, MapPinned, Receipt, Truck, UserRound, Users } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import AppShell from "./AppShell";
 import { Bell, ShieldAlert } from "lucide-react";
@@ -18,6 +18,7 @@ export default function TenantLayout({ children, title = "Fleet Console" }) {
       { to: "/dashboard", label: personal ? "My Dashboard" : "Fleet Dashboard", icon: LayoutDashboard },
       { to: "/tracking", label: personal ? "My Tracking" : "Live Fleet Tracking", icon: MapPinned },
       { to: "/vehicles", label: personal ? "My Vehicles" : "Fleet Vehicles", icon: Truck },
+      { to: "/reports", label: "Reports & Analytics", icon: ChartNoAxesCombined },
       ...(business ? [{ to: "/fleet", label: "Fleet Operations", icon: ClipboardList }] : []),
     ] },
     { name: "Connectivity", items: [

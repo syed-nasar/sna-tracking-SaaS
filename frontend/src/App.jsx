@@ -29,6 +29,7 @@ import CustomerBillingPage from "./pages/billing/CustomerBillingPage";
 import { PrintableInvoice } from "./pages/billing/BillingInvoices";
 
 const LiveTrackingPage = lazy(() => import("./pages/LiveTrackingPage"));
+const VehicleReportsPage = lazy(() => import("./pages/VehicleReportsPage"));
 const AlertsPage = lazy(() => import("./pages/AlertsPage"));
 const DeviceInventoryPage = lazy(() => import("./pages/platform/DeviceInventoryPage"));
 const SimConnectivityPage = lazy(() => import("./pages/platform/SimConnectivityPage"));
@@ -95,6 +96,7 @@ export default function App() {
           <Route path="/users" element={<UserManagementPage />} />
           <Route path="/fleet" element={<FleetOperationsPage />} />
           <Route path="/devices" element={<CustomerDevicesPage />} />
+          <Route path="/reports" element={<DeferredPage><VehicleReportsPage /></DeferredPage>} />
           <Route path="/alerts" element={<DeferredPage><AlertsPage /></DeferredPage>} />
           <Route path="/notifications" element={<DeferredPage><AlertsPage notifications /></DeferredPage>} />
           <Route path="/alerts/events/:eventId" element={<DeferredPage><AlertsPage /></DeferredPage>} />

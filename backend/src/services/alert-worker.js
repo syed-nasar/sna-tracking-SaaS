@@ -1,4 +1,4 @@
-const { timingSafeEqual } = require("node:crypto");
+const { createHash, timingSafeEqual } = require("node:crypto");
 const pool = require("../config/db");
 const { contains, point } = require("./alert-geometry");
 const { smtpEnabled } = require("./alert-email");
@@ -16,11 +16,19 @@ const labels = {
   offline:"Tracker went offline",online:"Tracker reconnected",ignition_on:"Ignition turned on",
   ignition_off:"Ignition turned off",low_battery:"Low battery",power_disconnected:"Device power disconnected",
 };
+function provisionalPositionId(position, fix, received) {
+  // Traccar forwards before assigning the database ID. Keep provisional
+  // keys negative so they cannot collide with persisted Traccar IDs.
+  const identity = [position.deviceId, fix, received, position.latitude, position.longitude];
+  const hash = createHash("sha256").update(JSON.stringify(identity)).digest().readBigUInt64BE();
+  return (-(1n + hash % 9223372036854775807n)).toString();
+}
 function normalize(body) {
   const pos=body?.position ?? (body?.event ? null : body);
   const event=body?.event;
   const input=event ?? pos;
-  if(!validId(input?.id)||!validId(input?.deviceId)) return null;
+  const provisional = !event && body?.position === pos && pos?.id === 0;
+  if((!validId(input?.id)&&!provisional)||!validId(input?.deviceId)) return null;
   const occurred=time(event?event.eventTime:pos.serverTime);
   if(!Number.isFinite(occurred)||occurred>Date.now()+60000) return null;
   if(body?.device && body.device.id!==input.deviceId) return null;
@@ -35,7 +43,8 @@ function normalize(body) {
   if(!event && (!point([pos.latitude,pos.longitude])||pos.valid!==true||
     !Number.isFinite(fix)||!Number.isFinite(received))) return null;
   return {
-    source:event?"event":"position", id:input.id, device:input.deviceId, occurred:new Date(occurred),
+    source:event?"event":"position", id:provisional?provisionalPositionId(pos,fix,received):input.id,
+    device:input.deviceId, occurred:new Date(occurred),
     data:{
       type:type??null, fix:Number.isFinite(fix)?fix:null, received:Number.isFinite(received)?received:null,
       fence:["entry","exit"].includes(type)?event.geofenceId:null,

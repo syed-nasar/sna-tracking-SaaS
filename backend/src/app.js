@@ -11,6 +11,7 @@ const platformTenantRoutes = require("./routes/platform-tenant.routes");
 const platformDeviceRoutes = require("./routes/platform-device.routes");
 
 const vehicleRoutes = require("./routes/vehicle.routes");
+const vehicleReports = require("./routes/vehicle-reports.routes");
 const vehicleImageRoutes = require("./routes/vehicle-image.routes");
 
 const userRoutes = require("./routes/user.routes");
@@ -66,6 +67,7 @@ app.use("/api/platform/billing", billingRoutes.platform);
 app.use("/api/vehicles", vehicleImageRoutes);
 
 app.use("/api/vehicles", vehicleRoutes);
+app.use("/api/reports", vehicleReports);
 
 app.use("/api/users", userRoutes);
 app.use("/api/fleet", fleetRoutes);

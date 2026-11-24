@@ -42,6 +42,13 @@ async function createDevice({ name, uniqueId }) {
 module.exports = {
   getDevices,
   getPositions,
+  async getReport(kind, params, signal) {
+    const response = await traccarApi.get(`/api/reports/${kind}`, {
+      params, signal, maxContentLength: 16 * 1024 * 1024,
+      maxRedirects: 0, headers: { Accept: "application/json" },
+    });
+    return response.data;
+  },
   createDevice,
   async geofenceRequest(method,path,data,params) {
     return (await traccarApi.request({method,url:`/api/${path}`,data,params})).data;
