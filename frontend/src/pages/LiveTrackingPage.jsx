@@ -32,6 +32,7 @@ import {
 import "leaflet/dist/leaflet.css";
 
 import { useAuth } from "../context/AuthContext";
+import { useBrand } from "../context/brand";
 import TenantLayout from "../components/TenantLayout";
 import FleetGroupFilter from "../components/FleetGroupFilter";
 import { PageHeader, SearchField, StateNotice, StatusBadge } from "../components/WorkspaceUi";
@@ -591,6 +592,7 @@ function VehicleMarker({ vehicle, selected, onSelect }) {
 }
 
 export default function LiveTrackingPage() {
+  const brand = useBrand();
   const { session } = useAuth();
   const profile = session?.profile;
 
@@ -609,7 +611,7 @@ export default function LiveTrackingPage() {
         mapTitle: "My Vehicles on Map",
         searchPlaceholder: "Search my vehicles...",
         emptyVehicles:
-          "No vehicles available for tracking yet. Contact SNA Technologies to register your first vehicle.",
+          `No vehicles available for tracking yet. Contact ${brand?.display_name || "SNA Technologies"} to register your first vehicle.`,
         noSearchResults:
           "No vehicles match your search.",
         noPositions:

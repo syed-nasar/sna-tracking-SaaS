@@ -1,8 +1,23 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const jwt = require("jsonwebtoken");
-const { resellerToken, slug, text, email } = require("../src/services/resellers");
+const { resellerToken, slug, text, email, publicBrand } = require("../src/services/resellers");
 const { manualInvitation } = require("../src/services/company-invitation-email");
+
+test("public branding queries allow suspended resellers and require verified host claims", async () => {
+  const calls = [];
+  const db = {query: async (sql, params) => {
+    calls.push({sql,params});
+    return {rows:[]};
+  }};
+  await publicBrand(db,"slug","tracknova");
+  await publicBrand(db,"host","fleet.tracknova.com");
+  assert.match(calls[0].sql,/WHERE r\.slug=\$1/);
+  assert.doesNotMatch(calls[0].sql,/r\.status/);
+  assert.match(calls[1].sql,/d\.hostname=\$1 AND d\.status='verified'/);
+  assert.doesNotMatch(calls[1].sql,/r\.status/);
+  assert.deepEqual(calls.map(call=>call.params),[["tracknova"],["fleet.tracknova.com"]]);
+});
 
 test("reseller claims use an audience distinct from both existing session types", () => {
   const original = process.env.JWT_SECRET;

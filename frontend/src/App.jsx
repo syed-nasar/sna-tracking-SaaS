@@ -7,11 +7,12 @@ import {
 } from "react-router-dom";
 import { lazy, Suspense } from "react";
 
-import { useAuth } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PlatformAlertDiagnostics from "./pages/platform/PlatformAlertDiagnostics";
 import PlatformLayout from "./components/PlatformLayout";
 import { StateNotice } from "./components/WorkspaceUi";
+import BrandProvider from "./context/BrandProvider";
 
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -30,6 +31,7 @@ import { PrintableInvoice } from "./pages/billing/BillingInvoices";
 
 const LiveTrackingPage = lazy(() => import("./pages/LiveTrackingPage"));
 const VehicleReportsPage = lazy(() => import("./pages/VehicleReportsPage"));
+const ResellerWorkspace = lazy(() => import("./pages/ResellerWorkspace"));
 const AlertsPage = lazy(() => import("./pages/AlertsPage"));
 const DeviceInventoryPage = lazy(() => import("./pages/platform/DeviceInventoryPage"));
 const SimConnectivityPage = lazy(() => import("./pages/platform/SimConnectivityPage"));
@@ -51,6 +53,7 @@ function HomeRedirect() {
   if (session?.type === "tenant") {
     return <Navigate to="/dashboard" replace />;
   }
+  if(session?.type==="reseller")return <Navigate to="/reseller/dashboard" replace />;
 
   return <Navigate to="/login" replace />;
 }
@@ -58,6 +61,8 @@ function HomeRedirect() {
 export default function App() {
   return (
     <BrowserRouter>
+      <AuthProvider>
+      <BrandProvider>
       <Routes>
         <Route path="/" element={<HomeRedirect />} />
 
@@ -75,6 +80,15 @@ export default function App() {
           path="/accept-invitation"
           element={<InvitationAcceptance />}
         />
+        <Route path="/r/:brandSlug/login" element={<LoginPage key="branded-login" />} />
+        <Route path="/r/:brandSlug/accept-invitation" element={<InvitationAcceptance key="branded-acceptance" />} />
+        <Route path="/r/:brandSlug/activate-admin" element={<InvitationAcceptance key="reseller-acceptance" reseller />} />
+        <Route path="/reseller/login" element={<LoginPage key="reseller-login" type="reseller" />} />
+        <Route element={<ProtectedRoute type="reseller" />}>
+          {["dashboard","customers","inventory","settings","customers/:id"].map(path=>
+            <Route key={path} path={`/reseller/${path}`} element={<DeferredPage><ResellerWorkspace key={path} /></DeferredPage>} />)}
+          <Route path="/reseller/customers/new" element={<DeferredPage><ResellerWorkspace key="create" onboard /></DeferredPage>} />
+        </Route>
 
         {/* Tenant routes */}
         <Route element={<ProtectedRoute type="tenant" />}>
@@ -108,6 +122,8 @@ export default function App() {
         <Route element={<ProtectedRoute type="platform" />}>
           <Route path="/platform/billing/invoices/:id/print" element={<PrintableInvoice platform />} />
           <Route element={<PlatformLayout />}>
+            <Route path="/platform/resellers" element={<DeferredPage><ResellerWorkspace key="platform-resellers" platform /></DeferredPage>} />
+            <Route path="/platform/resellers/:id" element={<DeferredPage><ResellerWorkspace key="platform-reseller" platform /></DeferredPage>} />
             <Route path="/platform/devices" element={<DeferredPage><DeviceInventoryPage /></DeferredPage>} />
             <Route path="/platform/connectivity" element={<DeferredPage><SimConnectivityPage /></DeferredPage>} />
             <Route path="/platform/billing" element={<DeferredPage><BillingPage /></DeferredPage>} />
@@ -120,6 +136,8 @@ export default function App() {
 
         <Route path="*" element={<HomeRedirect />} />
       </Routes>
+      </BrandProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

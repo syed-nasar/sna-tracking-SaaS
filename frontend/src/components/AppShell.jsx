@@ -1,8 +1,10 @@
 import { useRef, useState } from "react";
-import { ChevronDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Truck, UserRound, X } from "lucide-react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { ChevronDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen, UserRound, X } from "lucide-react";
+import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ThemeSelector from "./ThemeSelector";
+import BrandMark from "./BrandMark";
+import { useBrand } from "../context/brand";
 import NotificationBell from "./NotificationBell";
 
 function Navigation({ groups, collapsed = false, onNavigate }) {
@@ -23,9 +25,9 @@ function Navigation({ groups, collapsed = false, onNavigate }) {
   </nav>;
 }
 
-export default function AppShell({ children, title, workspace, groups, platform = false }) {
+export default function AppShell({ children, title, workspace, groups, platform = false, reseller = false }) {
   const { session, logout } = useAuth();
-  const navigate = useNavigate();
+  const identityBrand=useBrand();
   const drawer = useRef(null);
   const openDrawer = useRef(null);
   const accountMenu = useRef(null);
@@ -34,7 +36,7 @@ export default function AppShell({ children, title, workspace, groups, platform 
   const [collapsed, setCollapsed] = useState(() => {
     try { return sessionStorage.getItem(collapseKey) === "collapsed"; } catch { return false; }
   });
-  const home = platform ? "/platform/dashboard" : "/dashboard";
+  const home = platform ? "/platform/dashboard" : reseller ? "/reseller/dashboard" : "/dashboard";
 
   function toggleSidebar() {
     const next = !collapsed;
@@ -45,18 +47,18 @@ export default function AppShell({ children, title, workspace, groups, platform 
   }
 
   function signOut() {
-    if (logout()) navigate(platform ? "/platform/login" : "/login", { replace: true });
+    logout();
   }
 
-  const identity = profile?.fullName || (platform ? "Platform administrator" : "Account");
+  const identity = profile?.fullName || profile?.full_name || (platform ? "Platform administrator" : "Account");
   const initials = identity.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
-  const role = platform ? "Platform administrator" : profile?.role?.replaceAll("_", " ");
+  const role = platform ? "Platform administrator" : reseller ? "Reseller administrator" : profile?.role?.replaceAll("_", " ");
   const brand = (compact) => (
     <Link to={home} onClick={() => { if (drawer.current?.open) drawer.current.close(); }}
-      className={`flex min-w-0 items-center gap-3 ${compact ? "justify-center" : ""}`} aria-label="SNA Fleet home">
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-action"><Truck size={18} aria-hidden="true" /></span>
+      className={`flex min-w-0 items-center gap-3 ${compact ? "justify-center" : ""}`} aria-label={`${identityBrand?.display_name||"SNA Fleet"} home`}>
+      <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-action"><BrandMark brand={identityBrand} size={18} /></span>
       {!compact && <span className="min-w-0">
-        <span className="block text-sm font-bold tracking-tight">SNA Fleet</span>
+        <span className="block truncate text-sm font-bold tracking-tight">{identityBrand?.display_name||"SNA Fleet"}</span>
         <span className="block truncate text-xs text-muted">{workspace}</span>
       </span>}
     </Link>
@@ -95,7 +97,7 @@ export default function AppShell({ children, title, workspace, groups, platform 
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ThemeSelector />
-          {!platform && <NotificationBell />}
+          {!platform && !reseller && <NotificationBell />}
           <details ref={accountMenu} className="relative" onKeyDown={(event) => {
             if (event.key === "Escape" && accountMenu.current.open) {
               accountMenu.current.open = false;
@@ -114,8 +116,14 @@ export default function AppShell({ children, title, workspace, groups, platform 
                 <p className="break-words text-sm font-semibold">{identity}</p>
                 <p className="break-words text-xs capitalize text-muted">{role}</p>
               </div>
-              {!platform && <Link to="/account" onClick={() => { accountMenu.current.open = false; }}
+              {!platform && !reseller && <Link to="/account" onClick={() => { accountMenu.current.open = false; }}
                 className="flex items-center gap-2 rounded-lg p-2 text-sm hover:bg-hover"><UserRound size={16} /> Account settings</Link>}
+              {identityBrand?.support_email&&<a className="block rounded-lg p-2 text-sm hover:bg-hover"
+                href={`mailto:${identityBrand.support_email}`}>Email support</a>}
+              {identityBrand?.support_phone&&<a className="block rounded-lg p-2 text-sm hover:bg-hover"
+                href={`tel:${identityBrand.support_phone}`}>Call support</a>}
+              {identityBrand?.support_website&&<a className="block rounded-lg p-2 text-sm hover:bg-hover"
+                href={identityBrand.support_website} target="_blank" rel="noreferrer">Support website</a>}
               <button type="button" onClick={signOut} className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm hover:bg-hover">
                 <LogOut size={16} /> Sign Out
               </button>

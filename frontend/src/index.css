@@ -113,6 +113,22 @@ button, input, select, textarea { font-family: inherit; }
 button:not(:disabled), summary { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 input, select, textarea { accent-color: var(--ui-action); }
+
+.reseller-branded {
+  --ui-accent: color-mix(in srgb, var(--brand-highlight) 48%, black);
+  --ui-accent-soft: color-mix(in srgb, var(--brand-highlight) 12%, white);
+  --ui-accent-line: color-mix(in srgb, var(--brand-highlight) 45%, white);
+  --ui-action: color-mix(in srgb, var(--brand-primary) 45%, black);
+  --ui-action-hover: color-mix(in srgb, var(--brand-primary) 35%, black);
+}
+:root[data-theme="dark"] .reseller-branded {
+  --ui-accent: color-mix(in srgb, var(--brand-highlight) 32%, white);
+  --ui-accent-soft: color-mix(in srgb, var(--brand-highlight) 20%, #111827);
+  --ui-accent-line: color-mix(in srgb, var(--brand-highlight) 45%, #111827);
+}
+.reseller-branded .bg-action { color: white; }
+:root[data-theme="dark"] .brand-logo-light { display: none; }
+:root[data-theme="dark"] .brand-logo-dark { display: block; }
 button, select { touch-action: manipulation; }
 :focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
 :is(input, textarea, select):focus-visible { outline-offset: 1px; }

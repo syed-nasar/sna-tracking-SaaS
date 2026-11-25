@@ -68,6 +68,7 @@ function buildLoginResponse(user) {
       role: user.role,
       tenantName: user.tenant_name,
       customerType: user.customer_type,
+      resellerSlug: user.reseller_slug,
     },
   };
 }
@@ -126,7 +127,8 @@ router.post("/login", loginLimiter, async (req, res) => {
            u.token_version,
            t.name AS tenant_name,
            t.status AS tenant_status,
-           t.customer_type
+           t.customer_type,
+           (SELECT r.slug FROM resellers r WHERE r.id=t.reseller_id) AS reseller_slug
          FROM users u
          JOIN tenants t ON t.id = u.tenant_id
          WHERE LOWER(u.email) = LOWER($1)
@@ -169,7 +171,8 @@ router.post("/login", loginLimiter, async (req, res) => {
          u.token_version,
          t.name AS tenant_name,
          t.status AS tenant_status,
-         t.customer_type
+         t.customer_type,
+         (SELECT r.slug FROM resellers r WHERE r.id=t.reseller_id) AS reseller_slug
        FROM users u
        JOIN tenants t ON t.id = u.tenant_id
        WHERE LOWER(u.email) = LOWER($1)

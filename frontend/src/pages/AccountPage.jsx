@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import TenantLayout from "../components/TenantLayout";
 import ThemeSelector from "../components/ThemeSelector";
 import { useAuth } from "../context/AuthContext";
@@ -11,7 +10,6 @@ const buttonClass = "rounded-lg bg-action px-4 py-2 font-semibold disabled:opaci
 
 export default function AccountPage() {
   const { session, logout, refreshTenantProfile } = useAuth();
-  const navigate = useNavigate();
   const isBusiness = session.profile.customerType === "business";
   const title = isBusiness ? "Company Account" : "My Account";
   const [account, setAccount] = useState(null);
@@ -73,7 +71,7 @@ export default function AccountPage() {
     try {
       await tenantApi.patch("/users/me/password", { currentPassword, newPassword });
       form.reset();
-      if (logout()) navigate("/login", { replace: true });
+      logout();
     } catch (error) {
       setPasswordError(error.response?.data?.message || "Could not change your password.");
     } finally {

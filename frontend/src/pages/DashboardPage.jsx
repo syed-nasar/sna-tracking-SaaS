@@ -17,6 +17,7 @@ import {
 
 import { MetricCard, PageHeader } from "../components/WorkspaceUi";
 import { useAuth } from "../context/AuthContext";
+import { useBrand } from "../context/brand";
 import TenantLayout from "../components/TenantLayout";
 import { tenantApi } from "../services/api";
 
@@ -40,6 +41,7 @@ function VehicleStatus({ status }) {
 }
 
 export default function DashboardPage() {
+  const brand = useBrand();
   const { session } = useAuth();
   const profile = session?.profile;
 
@@ -58,7 +60,7 @@ export default function DashboardPage() {
         tableTitle: "My Vehicles",
         tableDescription: "Vehicles registered to your account",
         emptyMessage:
-          "You haven't added any vehicles yet. Contact SNA Technologies to register your first vehicle and start tracking.",
+          `You haven't added any vehicles yet. Contact ${brand?.display_name || "SNA Technologies"} to register your first vehicle and start tracking.`,
       }
     : {
         layoutTitle: "Fleet Overview",
@@ -343,7 +345,7 @@ export default function DashboardPage() {
             </p>
 
             <span className="text-xs text-subtle">
-              SNA Fleet Management
+              {brand?.display_name || "SNA Fleet Management"}
             </span>
           </div>
         </section>

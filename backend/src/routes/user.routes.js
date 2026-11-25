@@ -68,7 +68,8 @@ router.get("/me", async (req, res) => {
     const result = await pool.query(
       `SELECT u.id, u.full_name AS "fullName", u.email, u.role,
               t.name AS "tenantName", t.slug AS "tenantSlug",
-              t.customer_type AS "customerType"
+              t.customer_type AS "customerType",
+              (SELECT r.slug FROM resellers r WHERE r.id=t.reseller_id) AS "resellerSlug"
        FROM users u JOIN tenants t ON t.id = u.tenant_id
        WHERE u.tenant_id = $1 AND u.id = $2
          AND u.is_active AND t.status = 'active'`,

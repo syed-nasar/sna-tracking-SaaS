@@ -14,7 +14,7 @@ import {
   UserRound,
 } from "lucide-react";
 
-import { platformApi } from "../../services/api";
+import { platformApi,resellerApi } from "../../services/api";
 
 const inputClass =
   "w-full rounded-xl border border-line bg-field px-4 py-3 text-sm text-ink outline-none transition focus:border-accent-line";
@@ -73,7 +73,7 @@ function Field({
   );
 }
 
-export default function CompanyOnboarding() {
+export default function CompanyOnboarding({reseller=false}) {
   const navigate = useNavigate();
 
   const [form, setForm] = useState(initialForm);
@@ -81,7 +81,9 @@ export default function CompanyOnboarding() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
-  const invitationStatus = useInvitationStatus(result?.tenant?.id);
+  const invitationStatus = useInvitationStatus(result?.tenant?.id,undefined,reseller);
+  const home=reseller?"/reseller/dashboard":"/platform/dashboard";
+  const customers=reseller?"/reseller/customers":"/platform/tenants";
   const [copied, setCopied] = useState(false);
 
   const isPersonal = form.customer_type === "personal";
@@ -162,8 +164,8 @@ export default function CompanyOnboarding() {
     setSubmitting(true);
 
     try {
-      const response = await platformApi.post(
-        "/platform/tenants/onboard",
+      const response = await (reseller?resellerApi:platformApi).post(
+        reseller?"/reseller/customers":"/platform/tenants/onboard",
         payload
       );
 
@@ -328,7 +330,7 @@ export default function CompanyOnboarding() {
                 type="button"
                 onClick={() =>
                   navigate(
-                    `/platform/tenants/${result.tenant.id}`
+                    `${customers}/${result.tenant.id}`
                   )
                 }
                 className="inline-flex items-center gap-2 rounded-xl bg-action px-5 py-3 text-sm font-semibold transition hover:bg-action-hover"
@@ -338,7 +340,7 @@ export default function CompanyOnboarding() {
               </button>
 
               <Link
-                to="/platform/dashboard"
+                to={home}
                 className="inline-flex items-center rounded-xl border border-line px-5 py-3 text-sm font-medium text-secondary hover:bg-hover"
               >
                 Back to Dashboard
@@ -354,7 +356,7 @@ export default function CompanyOnboarding() {
     <main className="min-h-[calc(100dvh-4rem)] bg-canvas px-5 py-10 text-ink sm:px-8">
       <div className="mx-auto max-w-4xl">
         <Link
-          to="/platform/dashboard"
+          to={home}
           className="mb-8 inline-flex items-center gap-2 text-sm text-muted transition hover:text-ink"
         >
           <ArrowLeft size={17} />
@@ -363,7 +365,7 @@ export default function CompanyOnboarding() {
 
         <div className="mb-9">
           <p className="mb-2 text-sm font-semibold text-accent">
-            Platform Administration
+            {reseller?"Reseller Administration":"Platform Administration"}
           </p>
 
           <h1 className="text-3xl font-bold tracking-tight">

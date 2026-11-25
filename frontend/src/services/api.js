@@ -28,8 +28,9 @@ export const tenantApi = axios.create({
 export const platformApi = axios.create({
   ...api.defaults,
 });
+export const resellerApi = axios.create({...api.defaults});
 
-for (const [client, type] of [[tenantApi, "tenant"], [platformApi, "platform"]]) {
+for (const [client, type] of [[tenantApi, "tenant"], [platformApi, "platform"],[resellerApi,"reseller"]]) {
   client.interceptors.request.use((config) => {
     if (activeAuth?.type === type && !config.headers.has("Authorization")) {
       config.headers.set("Authorization", `Bearer ${activeAuth.token}`);
@@ -55,3 +56,6 @@ export async function loginPlatform(credentials) {
 }
 
 export default api;
+export async function loginReseller(credentials) {
+  return (await api.post("/reseller/auth/login",credentials)).data;
+}

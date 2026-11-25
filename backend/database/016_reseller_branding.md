@@ -21,7 +21,7 @@ Platform staff assign available unallocated stock to a reseller. Resellers can a
 
 ## Brand and delivery
 
-The presentation resolver uses the authenticated tenant or reseller first, then an explicit /r/:brandSlug public route, then a verified domain lookup from the browser hostname. All other entry points use the default brand, including platform pages, direct customers, and unknown or inactive public contexts. Forwarded Host headers do not determine scope or generate URLs. Branded login validates the customer's reseller. Authenticated customer branding can remain present if the reseller's administrative access is suspended.
+The presentation resolver uses the authenticated tenant or reseller first, then an explicit /r/:brandSlug public route, then a verified domain lookup from the browser hostname. All other entry points use the default brand, including platform pages, direct customers, and unknown public contexts. Forwarded Host headers do not determine scope or generate URLs. Branded login validates the customer's reseller. A suspended reseller retains its public slug and verified hostname branding so existing customers can sign in. Reseller administrator authentication and invitation eligibility remain separately enforced. Direct Personal customers use the generic login and reseller Personal customers use their branded login. Business customers can also use the generic login with their company slug.
 
 Brand settings are validated text, HTTPS support URLs and hexadecimal colors. Branding adjusts accent tokens while preserving functional status colors. PNG logos and favicons are size- and dimension-bounded, decoded and re-encoded before public serving. Replacement overwrites the relevant asset slot without accepting user file paths. SVG and remote assets are unsupported.
 
@@ -43,5 +43,18 @@ Create a pending public hostname claim. Publish the challenge shown in the UI as
 | Public and customer presentation | GET /api/brands/:slug, GET /api/brands/host/:hostname, GET /api/brands/:slug/assets/:kind, authenticated GET /api/tenant-brand |
 
 ## Local verification
+
+Authenticated logout and session invalidation return direct customers and Platform Admins to `/login`. Reseller Personal customers, Business customers, and reseller administrators return to `/r/:slug/login`. The destination is relative, so it remains on the verified custom domain when applicable. Reseller administrators land in reseller sign-in mode. Company sign-in is preselected for a Business customer.
+
+Login and profile restoration return the authenticated account's reseller association independently of public branding. The session record carries a non-sensitive login hint for expiration or restore failures. Clearing a session removes the entire record and the API bearer, and replaces the protected history entry. Missing or malformed hints use `/login`. A direct visit to a protected platform or reseller route without a session still opens that workspace's dedicated sign-in page. A mounted reseller workspace rechecks its session on focus, visibility, and a 30-second visible interval. API requests remain independently authorized throughout.
+
+For the HTTP matrix, prepare an empty disposable PostgreSQL database with the migrations through 016 on a loopback port other than 5432. The test requires a database name starting with `step42_auth_test` and writes only synthetic fixtures. From `backend`, set that database's `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` as applicable, then run:
+
+```powershell
+$env:STEP42_INTEGRATION='1'
+node --test test/step42-auth.integration.test.js
+```
+
+For the browser matrix, build the frontend with `VITE_API_BASE_URL=/api`. Set `STEP42_BROWSER_DIST` to the build directory and optionally `STEP42_CHROME` to the Chrome executable. From `backend`, run `node --test test/step42-navigation.browser.test.js`. It uses an isolated browser profile and loopback fixture APIs. The mocked hostname verifies same-origin navigation. Production DNS routing and TLS remain Step 46 work.
 
 Use a disposable database and a test mail transport. In Platform → Resellers create an organization, invite its administrator, and assign available stock. Activate the reseller administrator privately and sign in at /reseller/login. Configure branding and onboard a Personal and a Business customer. Allocate stock and use the existing customer installation action. Verify customer brand and history at /r/:slug/login, and exercise Light/Dark/System and protected refresh. Verify a second reseller cannot read or mutate those resources. Suspend the reseller and confirm that its administrator loses access while the customer remains signed in. Test domains against a controlled DNS fixture, since live DNS ownership and production routing require environment-specific setup.

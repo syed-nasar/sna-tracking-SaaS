@@ -1,8 +1,7 @@
 
 import { useState } from "react";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import {
-  Truck,
   ShieldCheck,
   Mail,
   LockKeyhole,
@@ -14,17 +13,24 @@ import {
 
 import { useAuth } from "../context/AuthContext";
 import ThemeSelector from "../components/ThemeSelector";
+import BrandMark from "../components/BrandMark";
+import { useBrand } from "../context/brand";
 
 export default function LoginPage({ type = "tenant" }) {
-  const isPlatform = type === "platform";
   const { state } = useLocation();
+  const {brandSlug}=useParams();
+  if (type === "tenant" && brandSlug && state?.signInType === "reseller") type = "reseller";
+  const isPlatform = type === "platform";
+  const isReseller=type==="reseller";
+  const brand=useBrand();
+  const resellerSlug=brandSlug??brand?.slug;
 
-  const { session, signInTenant, signInPlatform } = useAuth();
+  const { session, signInTenant, signInPlatform,signInReseller } = useAuth();
 
-  const [customerType, setCustomerType] = useState("personal");
+  const [customerType, setCustomerType] = useState(() => state?.customerType === "business" ? "business" : "personal");
 
   const [form, setForm] = useState({
-    tenantSlug: "",
+    tenantSlug: isReseller ? brandSlug ?? "" : "",
     email: "",
     password: "",
   });
@@ -34,13 +40,14 @@ export default function LoginPage({ type = "tenant" }) {
 
   const defaultDestination = isPlatform
     ? "/platform/dashboard"
-    : "/dashboard";
+    : isReseller ? "/reseller/dashboard" : "/dashboard";
   const requested = state?.returnTo;
   const pathname = requested?.pathname;
   const validReturn = state?.authType === type && typeof pathname === "string" &&
     pathname.startsWith("/") && !pathname.startsWith("//") && !pathname.includes("\\") &&
     pathname !== "/login" && pathname !== "/platform/login" &&
-    pathname.startsWith("/platform/") === isPlatform;
+    pathname.startsWith("/platform/") === isPlatform &&
+    pathname.startsWith("/reseller/") === isReseller && pathname!=="/reseller/login";
   const destination = validReturn ? requested : defaultDestination;
 
   if (session?.type === type) {
@@ -80,15 +87,19 @@ export default function LoginPage({ type = "tenant" }) {
           email,
           password,
         });
+      } else if (isReseller) {
+        await signInReseller({slug:form.tenantSlug.trim().toLowerCase(),email,password});
       } else if (customerType === "business") {
         await signInTenant({
           tenantSlug: form.tenantSlug.trim().toLowerCase(),
+          resellerSlug,
           email,
           password,
         });
       } else {
         // Personal customers do not need a tenant slug.
         await signInTenant({
+          resellerSlug,
           email,
           password,
         });
@@ -111,12 +122,12 @@ export default function LoginPage({ type = "tenant" }) {
       <div className="w-full max-w-md">
         <div className="mb-8 flex items-center justify-center gap-3">
           <div className="rounded-xl bg-action p-3 text-ink">
-            <Truck size={27} />
+            <BrandMark brand={brand} size={27} />
           </div>
 
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent">
-              SNA Technologies
+              {brand?.display_name||"SNA Technologies"}
             </p>
 
             <h1 className="text-xl font-bold text-ink">
@@ -140,17 +151,19 @@ export default function LoginPage({ type = "tenant" }) {
             <h2 className="text-2xl font-bold text-ink">
               {isPlatform
                 ? "Platform Administration"
-                : "Welcome back"}
+                : isReseller ? "Reseller Administration" : "Welcome back"}
             </h2>
 
             <p className="mt-2 text-sm text-muted">
               {isPlatform
                 ? "Sign in to manage your fleet platform."
-                : "Sign in to access your fleet dashboard."}
+                : isReseller ? "Sign in to manage your reseller customers and inventory."
+                  : "Sign in to access your fleet dashboard."}
             </p>
           </div>
 
-          {!isPlatform && (
+          {brand?.welcome&&<p className="mb-3 text-sm text-muted">{brand.welcome}</p>}
+          {!isPlatform && !isReseller && (
             <div className="mb-7">
               <p className="mb-3 text-sm font-medium text-secondary">
                 Account Type
@@ -197,13 +210,13 @@ export default function LoginPage({ type = "tenant" }) {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {!isPlatform && customerType === "business" && (
+            {!isPlatform && (isReseller || customerType === "business") && (
               <div>
                 <label
                   htmlFor="tenantSlug"
                   className="mb-2 block text-sm font-medium text-secondary"
                 >
-                  Company Slug
+                  {isReseller?"Reseller slug":"Company Slug"}
                 </label>
 
                 <div className="relative">
@@ -325,20 +338,24 @@ export default function LoginPage({ type = "tenant" }) {
             </button>
           </form>
 
-          <div className="mt-7 border-t border-line pt-6 text-center">
+          <div className="mt-7 flex flex-wrap justify-center gap-3 border-t border-line pt-6 text-center">
             <Link
-              to={isPlatform ? "/login" : "/platform/login"}
+              to={isPlatform || isReseller ? "/login" : "/platform/login"}
               className="text-sm text-muted transition hover:text-accent"
             >
-              {isPlatform
+              {isPlatform || isReseller
                 ? "Switch to Fleet Login"
                 : "Platform Administrator Login"}
             </Link>
+            {!isPlatform&&!isReseller&&<Link to="/reseller/login" className="text-sm text-muted hover:text-accent">
+              Reseller Administrator Login
+            </Link>}
           </div>
         </div>
 
         <p className="mt-8 text-center text-xs text-subtle">
-          © {new Date().getFullYear()} SNA Technologies.
+          © {new Date().getFullYear()} {brand?.display_name||"SNA Technologies"}.
+          {brand?.support_email&&<a className="ms-2 text-accent" href={`mailto:${brand.support_email}`}>Support</a>}
           All rights reserved.
         </p>
       </div>

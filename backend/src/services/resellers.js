@@ -75,8 +75,8 @@ async function publicBrand(db,filter,value) {
     r.support_email,r.support_phone,r.support_website,r.welcome,
     ARRAY(SELECT a.kind FROM reseller_brand_assets a WHERE a.reseller_id=r.id) AS assets
     FROM resellers r WHERE ${{
-      slug:"r.slug=$1 AND r.status='active'",
-      host:"r.status='active' AND EXISTS (SELECT 1 FROM reseller_domains d WHERE d.reseller_id=r.id AND d.hostname=$1 AND d.status='verified')",
+      slug:"r.slug=$1",
+      host:"EXISTS (SELECT 1 FROM reseller_domains d WHERE d.reseller_id=r.id AND d.hostname=$1 AND d.status='verified')",
       tenant:"EXISTS (SELECT 1 FROM tenants t WHERE t.reseller_id=r.id AND t.id=$1)",
       id:"r.id=$1",
     }[filter]}`,[value]);

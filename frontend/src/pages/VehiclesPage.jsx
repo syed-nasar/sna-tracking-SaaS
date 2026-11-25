@@ -27,6 +27,7 @@ import VehicleOperations from "../components/VehicleOperations";
 import VehicleGpsInstallation from "../components/VehicleGpsInstallation";
 import { Modal, PageHeader } from "../components/WorkspaceUi";
 import { useAuth } from "../context/AuthContext";
+import { useBrand } from "../context/brand";
 import { tenantApi } from "../services/api";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -166,6 +167,8 @@ function VehicleImage({
 }
 
 export default function VehiclesPage() {
+  const brand = useBrand();
+  const supportName = brand?.display_name || "SNA Technologies";
   const { session } = useAuth();
 
   const profile = session?.profile;
@@ -180,8 +183,8 @@ export default function VehiclesPage() {
         description: "View and manage your vehicles, GPS trackers, and vehicle photos.",
         directoryTitle: "My Vehicle Directory",
         searchPlaceholder: "Search my vehicles...",
-        emptyMessage: "You haven't added any vehicles yet. Contact SNA Technologies to register your first vehicle and start tracking.",
-        noDevicesMessage: "No unused GPS devices are allocated to your account. Contact SNA Technologies.",
+        emptyMessage: `You haven't added any vehicles yet. Contact ${supportName} to register your first vehicle and start tracking.`,
+        noDevicesMessage: `No unused GPS devices are allocated to your account. Contact ${supportName}.`,
       }
     : {
         layoutTitle: "Vehicle Management",
@@ -191,7 +194,7 @@ export default function VehiclesPage() {
         directoryTitle: "Vehicle Directory",
         searchPlaceholder: "Search fleet vehicles...",
         emptyMessage: "No vehicles registered for your company yet.",
-        noDevicesMessage: "No unused GPS devices are allocated to your company. Contact your platform administrator.",
+        noDevicesMessage: `No unused GPS devices are allocated to your company. Contact ${brand?.display_name || "your platform administrator"}.`,
       };
 
   const canManage =

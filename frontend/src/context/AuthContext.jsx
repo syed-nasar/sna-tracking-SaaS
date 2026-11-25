@@ -7,19 +7,24 @@ import {
   useRef,
   useState,
 } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 
 import {
   loginTenant,
   loginPlatform,
   tenantApi,
   platformApi,
+  resellerApi,
+  loginReseller,
   setActiveAuth,
 } from "../services/api";
-import { getTokenExpiry, readStoredSession, storeSession } from "../services/auth-session";
+import { getTokenExpiry, loginContext, loginDestination, readStoredSession, storeSession } from "../services/auth-session";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const { key: locationKey } = useLocation();
+  const [redirect, setRedirect] = useState(null);
   const [session, setSession] = useState(null);
   const [restoring, setRestoring] = useState(readStoredSession);
   const [restoreError, setRestoreError] = useState(false);
@@ -27,7 +32,9 @@ export function AuthProvider({ children }) {
   const loginAttempt = useRef(null);
   const profileRequest = useRef(null);
 
-  const logout = useCallback(() => {
+  const logout = useCallback((saved) => {
+    const previous = activeSession.current ?? saved;
+    const destination = loginDestination(previous?.type,previous?.login);
     activeSession.current = null;
     loginAttempt.current = null;
     profileRequest.current?.abort();
@@ -36,17 +43,22 @@ export function AuthProvider({ children }) {
     setRestoring(null);
     setRestoreError(false);
     setSession(null);
-  }, []);
+    setRedirect({locationKey,destination,state:{
+      signInType: previous?.type === "reseller" && destination !== "/login" ? "reseller" : null,
+      customerType: previous?.login?.customerType,
+    }});
+  }, [locationKey]);
 
   const startSession = useCallback((type, token, profile) => {
     const expiresAt = getTokenExpiry(token);
     if (!expiresAt || expiresAt <= Date.now()) throw new Error("Invalid or expired access token");
 
     profileRequest.current?.abort();
-    const next = { id: Symbol(), type, profile, expiresAt };
+    const login = loginContext(type,profile);
+    const next = { id: Symbol(), type, profile, expiresAt, login };
     activeSession.current = next;
     setActiveAuth({ id: next.id, type, token });
-    storeSession({ type, token });
+    storeSession({ type, token, login });
     setSession(next);
     setRestoring(null);
     setRestoreError(false);
@@ -58,11 +70,15 @@ export function AuthProvider({ children }) {
       return;
     }
     if (restoreError) return;
+    if (!(getTokenExpiry(restoring.token) > Date.now())) {
+      const timer = window.setTimeout(() => logout(restoring),0);
+      return () => window.clearTimeout(timer);
+    }
 
     const controller = new AbortController();
     const { type, token } = restoring;
-    const client = type === "platform" ? platformApi : tenantApi;
-    const path = type === "platform" ? "/platform/auth/me" : "/users/me";
+    const client = type === "platform" ? platformApi : type === "reseller" ? resellerApi : tenantApi;
+    const path = type === "platform" ? "/platform/auth/me" : type === "reseller" ? "/reseller/auth/me" : "/users/me";
     client.get(path, {
       headers: { Authorization: `Bearer ${token}` },
       signal: controller.signal,
@@ -71,7 +87,7 @@ export function AuthProvider({ children }) {
     }).catch((error) => {
       if (controller.signal.aborted) return;
       const status = error.response?.status;
-      if (status === 401 || status === 403 || getTokenExpiry(token) <= Date.now()) logout();
+      if (status === 401 || status === 403 || getTokenExpiry(token) <= Date.now()) logout(restoring);
       else setRestoreError(true);
     });
 
@@ -110,7 +126,8 @@ export function AuthProvider({ children }) {
     const attempt = Symbol();
     loginAttempt.current = attempt;
     const isPlatform = type === "platform";
-    const data = await (isPlatform ? loginPlatform(credentials) : loginTenant(credentials));
+    const login = isPlatform ? loginPlatform : type === "reseller" ? loginReseller : loginTenant;
+    const data = await login(credentials);
     const profile = isPlatform ? data.admin : data.user;
     if (!data.accessToken || !profile) {
       throw new Error("Invalid authentication response");
@@ -123,10 +140,12 @@ export function AuthProvider({ children }) {
 
   const sessionType = session?.type;
   useEffect(() => {
-    if (sessionType !== "tenant") return;
+    if (sessionType !== "tenant" && sessionType !== "reseller") return;
 
     const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") void refreshTenantProfile();
+      if (document.visibilityState !== "visible") return;
+      if (sessionType === "tenant") void refreshTenantProfile();
+      else void resellerApi.get("/reseller/auth/me").catch(() => {});
     };
     const timer = window.setInterval(refreshWhenVisible, 30_000);
     window.addEventListener("focus", refreshWhenVisible);
@@ -175,6 +194,7 @@ export function AuthProvider({ children }) {
         (response) => response,
         onRejected
       );
+    const resellerInterceptor = resellerApi.interceptors.response.use(response=>response,onRejected);
 
     return () => {
       tenantApi.interceptors.response.eject(
@@ -184,8 +204,13 @@ export function AuthProvider({ children }) {
       platformApi.interceptors.response.eject(
         platformInterceptor
       );
+      resellerApi.interceptors.response.eject(resellerInterceptor);
     };
   }, [logout]);
+
+  if (redirect?.locationKey === locationKey) {
+    return <Navigate to={redirect.destination} replace state={redirect.state} />;
+  }
 
   if (restoring) {
     return (
@@ -195,7 +220,7 @@ export function AuthProvider({ children }) {
             <p role="alert">Could not verify your saved session. Check the connection and try again.</p>
             <div className="flex flex-wrap gap-3">
               <button className="rounded-lg bg-action px-4 py-2" onClick={() => setRestoreError(false)}>Retry</button>
-              <button className="rounded-lg border border-line-strong px-4 py-2" onClick={logout}>Sign in again</button>
+              <button className="rounded-lg border border-line-strong px-4 py-2" onClick={() => logout(restoring)}>Sign in again</button>
             </div>
           </div>
         ) : <p role="status">Restoring session…</p>}
@@ -209,6 +234,7 @@ export function AuthProvider({ children }) {
         session,
         signInTenant: (credentials) => signIn("tenant", credentials),
         signInPlatform: (credentials) => signIn("platform", credentials),
+        signInReseller: (credentials) => signIn("reseller", credentials),
         refreshTenantProfile,
         logout: () => {
           if (!session || session.id !== activeSession.current?.id) return false;

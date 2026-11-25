@@ -1,6 +1,8 @@
 
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate,useParams } from "react-router-dom";
+import { useBrand,brandLogin } from "../context/brand";
+import BrandMark from "../components/BrandMark";
 import {
   ArrowRight,
   CheckCircle2,
@@ -10,7 +12,6 @@ import {
   LoaderCircle,
   LockKeyhole,
   ShieldCheck,
-  Truck,
 } from "lucide-react";
 
 import api from "../services/api";
@@ -18,8 +19,11 @@ import api from "../services/api";
 const inputClass =
   "w-full rounded-xl border border-line bg-field px-4 py-3 text-sm text-ink outline-none transition focus:border-accent-line";
 
-export default function InvitationAcceptance() {
+export default function InvitationAcceptance({reseller=false}) {
   const navigate = useNavigate();
+  const brand=useBrand();
+  const {brandSlug}=useParams();
+  const loginPath=reseller?"/reseller/login":brandSlug?`/r/${brandSlug}/login`:brandLogin(brand);
 
   const [form, setForm] = useState(() => ({
     token: new URLSearchParams(window.location.hash.slice(1)).get("token") ?? "",
@@ -84,10 +88,11 @@ export default function InvitationAcceptance() {
 
     try {
       const response = await api.post(
-        "/auth/invitations/accept",
+        reseller?"/reseller/auth/accept":"/auth/invitations/accept",
         {
           token,
           password: form.password,
+          brandSlug,
         }
       );
 
@@ -133,7 +138,7 @@ export default function InvitationAcceptance() {
 
           <button
             type="button"
-            onClick={() => navigate("/login")}
+            onClick={() => navigate(loginPath)}
             className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-action px-5 py-3.5 text-sm font-semibold transition hover:bg-action-hover"
           >
             Continue to Tenant Login
@@ -149,12 +154,12 @@ export default function InvitationAcceptance() {
       <div className="w-full max-w-lg">
         <div className="mb-8 flex items-center justify-center gap-3">
           <div className="rounded-xl bg-action p-3">
-            <Truck size={25} />
+            <BrandMark brand={brand} size={25} />
           </div>
 
           <div>
             <h1 className="text-lg font-bold">
-              SNA Fleet
+              {brand?.display_name||"SNA Fleet"}
             </h1>
             <p className="text-xs text-muted">
               Fleet Management Platform
@@ -174,7 +179,7 @@ export default function InvitationAcceptance() {
 
             <p className="mt-3 text-sm leading-6 text-muted">
               Enter your invitation token and create a
-              password to activate your Tenant Administrator
+              password to activate your {reseller?"Reseller Administrator":"Tenant Administrator"}
               account.
             </p>
           </div>
@@ -314,11 +319,12 @@ export default function InvitationAcceptance() {
 
           <div className="mt-7 border-t border-line pt-6 text-center">
             <Link
-              to="/login"
+              to={loginPath}
               className="text-sm text-accent transition hover:text-accent"
             >
               Already activated? Sign In
             </Link>
+            {brand?.support_email&&<a className="block text-accent" href={`mailto:${brand.support_email}`}>Support</a>}
           </div>
         </div>
       </div>
