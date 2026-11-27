@@ -21,6 +21,26 @@ async function getPositions() {
 
 // Create a GPS device in Traccar.
 // The uniqueId must match the identifier used by the GPS tracker.
+const provisioningOptions = {
+  maxRedirects: 0, maxContentLength: 8 * 1024 * 1024,
+  headers: { Accept: "application/json" },
+};
+
+async function provisioningDevices() {
+  // In 6.17 filtered lookups are permission-scoped, and all=true is global only for admins.
+  const email = process.env.TRACCAR_EMAIL;
+  if (!email || !process.env.TRACCAR_PASSWORD || !process.env.TRACCAR_BASE_URL) return null;
+  const { data: users } = await traccarApi.get("/api/users", {
+    ...provisioningOptions, params: { keyword: email },
+  });
+  if (!Array.isArray(users) || !users.some((user) =>
+    user?.email?.toLowerCase() === email.toLowerCase() && user.administrator === true)) return null;
+  const { data } = await traccarApi.get("/api/devices", {
+    ...provisioningOptions, params: { all: true, excludeAttributes: true },
+  });
+  return data;
+}
+
 async function createDevice({ name, uniqueId }) {
   if (
     typeof name !== "string" ||
@@ -34,7 +54,7 @@ async function createDevice({ name, uniqueId }) {
   const response = await traccarApi.post("/api/devices", {
     name: name.trim(),
     uniqueId: uniqueId.trim(),
-  });
+  }, provisioningOptions);
 
   return response.data;
 }
@@ -50,6 +70,7 @@ module.exports = {
     return response.data;
   },
   createDevice,
+  provisioningDevices,
   async geofenceRequest(method,path,data,params) {
     return (await traccarApi.request({method,url:`/api/${path}`,data,params})).data;
   },

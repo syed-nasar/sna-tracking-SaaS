@@ -192,7 +192,8 @@ async function listTenantDevices(req, res, availableOnly = false) {
        FROM gps_devices d LEFT JOIN vehicles v
          ON (v.traccar_device_id, v.tenant_id) = (d.traccar_device_id, d.tenant_id)
        WHERE d.tenant_id = $1 AND (
-         NOT $2::boolean OR (d.lifecycle_status = 'reserved' AND d.traccar_device_id IS NOT NULL AND v.id IS NULL)
+         NOT $2::boolean OR (d.lifecycle_status = 'reserved' AND d.provisioning_status = 'provisioned'
+           AND d.traccar_device_id IS NOT NULL AND v.id IS NULL)
        )
        ORDER BY d.id`, [req.auth.tenantId, availableOnly]
     );

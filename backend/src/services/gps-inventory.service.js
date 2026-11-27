@@ -75,6 +75,12 @@ async function changeState(client, device, lifecycle, tenantId) {
   );
 }
 
+function requireProvisioned(device) {
+  if (device.provisioning_status !== "provisioned" || !device.traccar_device_id) {
+    fail(409, "Verify GPS provisioning before assigning, allocating, or installing this device.");
+  }
+}
+
 async function changeAllocation({ deviceId, byTraccarId = false, targetTenantId, action, actor, authorizeAllocation }) {
   return transaction(async (client) => {
     if (targetTenantId) await lockTenant(client, targetTenantId);
@@ -84,6 +90,7 @@ async function changeAllocation({ deviceId, byTraccarId = false, targetTenantId,
     );
     if (!device) fail(404, "GPS device not found.");
     if (authorizeAllocation) await authorizeAllocation(client,device);
+    if (targetTenantId) requireProvisioned(device);
     const previous = device.tenant_id;
     const lifecycle = device.lifecycle_status;
     if (lifecycle === "installed") fail(409, "Remove the device from its vehicle before changing allocation.");
@@ -122,6 +129,7 @@ async function reservedDevice(client, tenantId, traccarDeviceId) {
     [tenantId, traccarDeviceId]
   );
   if (!device) fail(404, "Allocated GPS device not found.");
+  requireProvisioned(device);
   if (device.lifecycle_status !== "reserved") fail(409, "GPS device is already installed or unavailable.");
   return device;
 }
@@ -172,6 +180,7 @@ async function setInstallation({ tenantId, vehicleId, traccarDeviceId, fromVehic
     const next = devices.find((device) => device.traccar_device_id === traccarDeviceId);
     if (removeDeviceId && previous?.id !== removeDeviceId) fail(409, "This installation has already changed.");
     if (traccarDeviceId && !next) fail(404, "Allocated GPS device not found.");
+    if (next) requireProvisioned(next);
     if (next && next.lifecycle_status !== (source ? "installed" : "reserved")) {
       fail(409, "GPS device is already installed or unavailable.");
     }
@@ -208,5 +217,5 @@ async function setInstallation({ tenantId, vehicleId, traccarDeviceId, fromVehic
 
 module.exports = {
   InventoryError, fail, respondError, parseId, transaction, event, changeState, changeAllocation,
-  recordVehicleCreation, setInstallation,
+  recordVehicleCreation, setInstallation, requireProvisioned,
 };

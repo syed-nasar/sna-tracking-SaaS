@@ -9,10 +9,13 @@ const { startInvitationEmail } = require("./services/company-invitation-email");
 const { startResellerEmail } = require("./services/reseller-invitations");
 const { startGeofenceSync } = require("./services/alert-geofence-sync");
 
+const { startProvisioningWorker } = require("./services/gps-provisioning.service");
+
 const PORT = Number(process.env.PORT || 3000);
 const HOST = "127.0.0.1";
 
-app.listen(PORT, HOST, () => {
+let stopProvisioning = async () => {};
+const server = app.listen(PORT, HOST, () => {
   console.log(
     `SNA Fleet backend running at http://${HOST}:${PORT}`
   );
@@ -22,4 +25,13 @@ app.listen(PORT, HOST, () => {
   startInvitationEmail();
   startResellerEmail();
   startGeofenceSync();
+  stopProvisioning = startProvisioningWorker();
 });
+
+async function shutdown() {
+  server.close();
+  await stopProvisioning();
+  process.exit(0);
+}
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);

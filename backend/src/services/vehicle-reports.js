@@ -103,14 +103,14 @@ function normalize(v,window,raw,tripRows,stopRows,tripId) {
   const observations=raw.filter(p=>String(p?.deviceId)===v.device_id)
     .map(p=>({at:time(p.fixTime),point:point(p,window,v.device_id)}))
     .filter(p=>Number.isFinite(p.at)).sort((a,b)=>a.at-b.at);
-  const output={trips:[],stops:[],omitted:0,route:null};
+  const output={trips:[],stops:[],omitted:0,zeroDurationIntervals:0,route:null};
   const intervals=[...tripRows.map(row=>({type:"trips",row})),...stopRows.map(row=>({type:"stops",row}))]
     .filter(({row})=>String(row?.deviceId)===v.device_id)
     .map(item=>({...item,start:time(item.row.startTime),end:time(item.row.endTime)}))
     .sort((a,b)=>a.start-b.start || a.end-b.end);
   let previousEnd=-Infinity;
   for(const {row,type,start,end} of intervals){
-    if(!(start>=window.from&&end<window.to&&end>start) || start<previousEnd){output.omitted++;continue;}
+    if(!(start>=window.from&&end<window.to&&end>=start) || start<previousEnd){output.omitted++;continue;}
     const startIndex=lowerBound(observations,start);
     const endIndex=lowerBound(observations,end+1);
     const candidates=observations.slice(startIndex,endIndex);
@@ -119,6 +119,12 @@ function normalize(v,window,raw,tripRows,stopRows,tripId) {
     const first=points.find(p=>p?.at===start&&p.id===String(startId));
     const last=points.findLast(p=>p?.at===end&&(type==="stops"||p.id===String(row.endPositionId)));
     if(!first || !last || points.some(p=>!p)){output.omitted++;continue;}
+    if(start===end){
+      if(!(start>window.installed) || filterTime(row.startTime)!==start || filterTime(row.endTime)!==end ||
+          !id(first.id) || !id(last.id)) output.omitted++;
+      else output.zeroDurationIntervals++;
+      continue;
+    }
     previousEnd=end;
     const reportId=createHash("sha256").update(JSON.stringify([v.id,v.installation,type,first.id,last.id,start,end])).digest("hex");
     const duration=(end-start)/1000;
@@ -179,7 +185,7 @@ async function fetchDataset(auth,filters,tripId) {
     const rows=await scope(auth,filters.vehicles);
     if(filters.vehicles.length&&rows.length!==filters.vehicles.length) reject(404,"Vehicle not found.");
     if(rows.length>MAX_VEHICLES) reject(400,"Select up to 10 vehicles for each report.");
-    const result={trips:[],stops:[],omitted:0,route:null,vehicles:rows.map(vehicle),access:rows};
+    const result={trips:[],stops:[],omitted:0,zeroDurationIntervals:0,route:null,vehicles:rows.map(vehicle),access:rows};
     const deadline=AbortSignal.any([controller.signal,AbortSignal.timeout(35000)]);
     for(const v of rows){
       if(!eligible(v))continue;
@@ -202,6 +208,7 @@ async function fetchDataset(auth,filters,tripId) {
       const normalized=normalize(v,{from,to,now,installed,day:filters.day},...reports,tripId);
       result.trips.push(...normalized.trips);result.stops.push(...normalized.stops);
       result.omitted+=normalized.omitted;
+      result.zeroDurationIntervals+=normalized.zeroDurationIntervals;
       if(normalized.route)result.route=normalized.route;
       if(result.trips.length+result.stops.length>MAX_RECORDS) reject(413,"Too many report rows. Narrow your filters.");
     }
@@ -225,7 +232,7 @@ function summary(trips,stops) {
   };
 }
 function assemble(dataset,type,filters,paginate=true) {
-  const {trips,stops,vehicles,omitted}=dataset;
+  const {trips,stops,vehicles,omitted,zeroDurationIntervals=0}=dataset;
   const byVehicle=new Map(vehicles.map(v=>[v.id,{v,trips:[],stops:[],days:new Map()}]));
   const days=new Map();
   for(const trip of trips){
@@ -253,7 +260,7 @@ function assemble(dataset,type,filters,paginate=true) {
   const sorted=[...list].sort(order[filters.sort]);
   const offset=(filters.page-1)*filters.limit;
   return {type,rows:paginate?sorted.slice(offset,offset+filters.limit):sorted,totalRows:sorted.length,
-    page:filters.page,limit:filters.limit,totals:summary(trips,stops),trend,vehicles,omitted,
+    page:filters.page,limit:filters.limit,totals:summary(trips,stops),trend,vehicles,omitted,zeroDurationIntervals,
     range:{from:iso(filters.from),to:iso(filters.to),timezone:filters.timezone}};
 }
 

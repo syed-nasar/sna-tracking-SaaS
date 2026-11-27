@@ -4,6 +4,7 @@ import TenantLayout from "../components/TenantLayout";
 import { MetricCard, PageHeader, StateNotice } from "../components/WorkspaceUi";
 import { useAuth } from "../context/AuthContext";
 import { tenantApi } from "../services/api";
+import { reportFeedback } from "../services/report-feedback";
 import "leaflet/dist/leaflet.css";
 
 const TYPES={trips:"Trip history",mileage:"Mileage",stops:"Stops",activity:"Fleet activity"};
@@ -47,6 +48,7 @@ function Overview({result}) {
     ["Vehicles with activity",totals.activeVehicles],["Observed idle",duration(totals.idle)],
   ];
   const largest=Math.max(1,...trend.map(d=>d.distance??0));
+  const feedback=reportFeedback(result);
   return <>
     <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
       {metrics.map(([label,value])=><MetricCard key={label} title={label} value={value} />)}
@@ -62,9 +64,9 @@ function Overview({result}) {
         </li>)}
       </ul>
     </section>}
-    {(totals.partialDistance||result.omitted>0||result.vehicles.some(v=>!v.historyAvailable))&&
-      <p role="status" className="text-sm text-muted">Results may be incomplete. {result.omitted>0&&`${result.omitted} intervals were omitted because their bounds were unverified or overlapped. `}
-        Vehicles without a verified installation have no historical telemetry. Distance is GPS-derived.</p>}
+    {feedback.length>0&&<div role="status" className="space-y-1 text-sm text-muted">
+      {feedback.map(message=><p key={message}>{message}</p>)}
+    </div>}
   </>;
 }
 

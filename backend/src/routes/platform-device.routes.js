@@ -2,6 +2,7 @@ const express = require("express");
 const pool = require("../config/db");
 const { requirePlatformAuth } = require("../middleware/platform-auth.middleware");
 const traccar = require("../services/traccar.service");
+const provisioning = require("../services/gps-provisioning.service");
 const {
   fail, respondError, parseId, transaction, event, changeState, changeAllocation, setInstallation,
 } = require("../services/gps-inventory.service");
@@ -25,6 +26,8 @@ const inventoryProjection = Object.entries(inventoryFields)
   .map(([name, [column]]) => `d.${column}${name === "purchaseDate" ? "::text" : ""} AS "${name}"`).join(", ");
 const detailQuery = `SELECT d.id, d.traccar_device_id AS "traccarDeviceId", d.tenant_id AS "tenantId",
   t.name AS "tenantName", d.lifecycle_status AS "lifecycleStatus", d.status,
+  d.provisioning_status AS "provisioningStatus", d.provider_verified_at AS "providerVerifiedAt",
+  (d.provisioning_status = 'provisioned' AND d.traccar_device_id IS NOT NULL) AS "allocationReady",
   v.id AS "vehicleId", v.name AS "vehicleName", v.gps_installed_at AS "installedAt",
   d.created_at AS "createdAt", d.updated_at AS "updatedAt", ${inventoryProjection}
   FROM gps_devices d LEFT JOIN tenants t ON t.id = d.tenant_id
@@ -120,17 +123,17 @@ router.get("/", handle(async (_req, res) => {
   res.json(rows.map((device) => withTelemetry(device, tracked?.get(device.traccarDeviceId))));
 }));
 
-async function registerLinked(client, device, actor) {
-  const traccarId = parseId(device.id);
-  if (!traccarId) fail(502, "Traccar returned an invalid device ID.");
-  const uniqueId = trackedIdentity(device);
-  const { rows: [registered] } = await client.query(
-    `INSERT INTO gps_devices (traccar_device_id, unique_identifier, device_name)
-     VALUES ($1, $2, $3) RETURNING id`,
-    [traccarId, uniqueId, device.name?.slice(0, 150) || null]
-  );
-  await event(client, registered.id, "registered", actor, { traccarDeviceId: traccarId, toLifecycle: "available" });
-  return getDetail(registered.id, client);
+async function register(fields, actor, mode = "provision", requestedId = null) {
+  return transaction(async (client) => {
+    const { rows: [record] } = await client.query(
+      `INSERT INTO gps_devices (${fields.map(([field]) => field).join(", ")})
+       VALUES (${fields.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING *`,
+      fields.map(([, value]) => value)
+    );
+    await event(client, record.id, "registered", actor, { toLifecycle: "available" });
+    await provisioning.enqueue(client, record, actor.adminId, mode, "provisioning_requested", requestedId);
+    return getDetail(record.id, client);
+  });
 }
 
 router.post("/", handle(async (req, res) => {
@@ -138,46 +141,19 @@ router.post("/", handle(async (req, res) => {
   const id = identifier(req.body.traccarDeviceId, "Traccar device ID");
   const tracked = (await trackedDevices(true)).get(id);
   if (!tracked) fail(404, "Traccar device not found.");
-  const device = await transaction((client) => registerLinked(client, tracked, req.platformAuth));
-  res.status(201).json({ message: "GPS device registered successfully", device: withTelemetry(device, tracked) });
+  const device = await register([
+    ["unique_identifier", trackedIdentity(tracked)], ["device_name", tracked.name?.slice(0, 150) || null],
+  ], req.platformAuth, "manual", id);
+  res.status(202).json({ message: "GPS device registered. Provider verification pending.", device });
 }));
 
-// This legacy action is an explicit administrator request. Inventory CRUD,
-// linking, installation, and allocation never create a Traccar device.
 router.post("/create", handle(async (req, res) => {
-  if (!validBody(req.body, ["name", "uniqueId"])) fail(400, "Invalid GPS device details.");
-  const { name, uniqueId } = req.body;
-  if (typeof name !== "string" || !name.trim() || name.trim().length > 150 || name.includes("\0")) {
-    fail(400, "Invalid GPS device name.");
+  if (!validBody(req.body, ["name", "uniqueId"]) || typeof req.body.name !== "string" || !req.body.name.trim()) {
+    fail(400, "A GPS device name and unique identifier are required.");
   }
-  const [[, identifierValue]] = details({ uniqueId });
-  const device = await transaction(async (client) => {
-    // A unique local reservation serializes concurrent creates of this identifier.
-    const { rows: [reserved] } = await client.query(
-      "INSERT INTO gps_devices (unique_identifier, device_name) VALUES ($1, $2) RETURNING id",
-      [identifierValue, name.trim()]
-    );
-    const tracked = await trackedDevices(true);
-    if ([...tracked.values()].some((item) => item.uniqueId?.trim().toLowerCase() === identifierValue.toLowerCase())) {
-      fail(409, "This identifier already exists in Traccar. Register or link the existing device.");
-    }
-    let created;
-    try {
-      created = await traccar.createDevice({ name: name.trim(), uniqueId: identifierValue });
-    } catch (error) {
-      if ([400, 409].includes(error.response?.status)) fail(409, "Traccar rejected the identifier.");
-      fail(502, "Traccar did not confirm creation. Check Traccar before retrying.");
-    }
-    const id = parseId(created?.id);
-    if (!id) fail(502, "Traccar returned an invalid ID. Check Traccar and register the existing device.");
-    if (trackedIdentity(created).toLowerCase() !== identifierValue.toLowerCase()) {
-      fail(502, "Traccar returned a different identifier. Check Traccar before retrying.");
-    }
-    await client.query("UPDATE gps_devices SET traccar_device_id = $2 WHERE id = $1", [reserved.id, id]);
-    await event(client, reserved.id, "registered", req.platformAuth, { traccarDeviceId: id, toLifecycle: "available" });
-    return withTelemetry(await getDetail(reserved.id, client), created);
-  });
-  res.status(201).json({ message: "GPS device created and registered successfully", device });
+  const fields = details({ deviceName: req.body.name, uniqueId: req.body.uniqueId ?? null });
+  const device = await register(fields, req.platformAuth);
+  res.status(202).json({ message: "GPS device registered. Provisioning pending.", device });
 }));
 
 router.get("/inventory", handle(async (req, res) => {
@@ -209,15 +185,7 @@ router.get("/inventory", handle(async (req, res) => {
 router.post("/inventory", handle(async (req, res) => {
   const fields = details(req.body);
   if (!req.body.uniqueId) fail(400, "A unique identifier is required.");
-  const device = await transaction(async (client) => {
-    const { rows: [record] } = await client.query(
-      `INSERT INTO gps_devices (${fields.map(([field]) => field).join(", ")})
-       VALUES (${fields.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING id`,
-      fields.map(([, value]) => value)
-    );
-    await event(client, record.id, "registered", req.platformAuth, { toLifecycle: "available" });
-    return getDetail(record.id, client);
-  });
+  const device = await register(fields, req.platformAuth);
   res.status(201).json(device);
 }));
 
@@ -236,7 +204,7 @@ router.get("/inventory/:id", handle(async (req, res) => {
   const device = await getDetail(identifier(req.params.id));
   const tracked = device.traccarDeviceId ? await trackedDevices() : null;
   res.json({ ...withTelemetry(device, tracked?.get(device.traccarDeviceId)), identifierVerified:
-    Boolean(device.traccarDeviceId && device.uniqueId) });
+    device.provisioningStatus === "provisioned" });
 }));
 
 router.patch("/inventory/:id", handle(async (req, res) => {
@@ -244,11 +212,12 @@ router.patch("/inventory/:id", handle(async (req, res) => {
   const fields = details(req.body);
   const device = await transaction(async (client) => {
     const { rows: [current] } = await client.query(
-      "SELECT id, traccar_device_id, unique_identifier FROM gps_devices WHERE id = $1 FOR UPDATE", [id]
+      "SELECT * FROM gps_devices WHERE id = $1 FOR UPDATE", [id]
     );
     if (!current) fail(404, "GPS device not found.");
     const unique = fields.find(([column]) => column === "unique_identifier");
-    if (unique && current.traccar_device_id && unique[1] !== current.unique_identifier) {
+    if (unique && (current.traccar_device_id || current.provider_create_uncertain ||
+        ["pending", "processing", "retry"].includes(current.provisioning_status)) && unique[1] !== current.unique_identifier) {
       fail(409, "Use Traccar reconciliation to verify an existing linked identifier.");
     }
     await client.query(
@@ -261,33 +230,58 @@ router.patch("/inventory/:id", handle(async (req, res) => {
   res.json(device);
 }));
 
-router.patch("/inventory/:id/link", handle(async (req, res) => {
+async function requestProvisioning(req, mode, action, requestedId = null) {
   const id = identifier(req.params.id);
-  if (!validBody(req.body, ["traccarDeviceId"])) fail(400, "Specify the existing Traccar device ID.");
-  const traccarDeviceId = identifier(req.body.traccarDeviceId, "Traccar device ID");
-  const tracked = (await trackedDevices(true)).get(traccarDeviceId);
-  if (!tracked) fail(404, "Traccar device not found.");
-  const uniqueId = trackedIdentity(tracked);
-  const result = await transaction(async (client) => {
-    const { rows: [device] } = await client.query("SELECT * FROM gps_devices WHERE id = $1 FOR UPDATE", [id]);
+  return transaction(async (client) => {
+    const { rows: [device] } = await client.query("SELECT * FROM gps_devices WHERE id=$1 FOR UPDATE", [id]);
     if (!device) fail(404, "GPS device not found.");
-    if (device.lifecycle_status === "retired") fail(409, "Retired devices cannot be linked.");
-    if (device.traccar_device_id && device.traccar_device_id !== traccarDeviceId) {
+    if (requestedId && device.traccar_device_id && device.traccar_device_id !== requestedId) {
       fail(409, "A linked Traccar ID cannot be replaced.");
     }
-    if (device.unique_identifier && device.unique_identifier.toLowerCase() !== uniqueId.toLowerCase()) {
-      fail(409, "The inventory identifier does not match the Traccar identifier.");
-    }
-    if (device.traccar_device_id === traccarDeviceId && device.unique_identifier) return getDetail(id, client);
-    await client.query(
-      `UPDATE gps_devices SET traccar_device_id = $2, unique_identifier = $3,
-       device_name = COALESCE(device_name, $4), updated_at = NOW() WHERE id = $1`,
-      [id, traccarDeviceId, uniqueId, tracked.name?.slice(0, 150) || null]
-    );
-    await event(client, id, "linked", req.platformAuth, { traccarDeviceId });
-    return getDetail(id, client);
+    return provisioning.enqueue(client, device, req.platformAuth.adminId, mode, action, requestedId);
   });
-  res.json(withTelemetry(result, tracked));
+}
+
+router.patch("/inventory/:id/link", handle(async (req, res) => {
+  if (!validBody(req.body, ["traccarDeviceId"])) fail(400, "Specify the existing Traccar device ID.");
+  const attemptId = await requestProvisioning(req, "manual", "manual_recovery_requested",
+    identifier(req.body.traccarDeviceId, "Traccar device ID"));
+  res.status(202).json({ attemptId });
+}));
+
+router.post("/inventory/:id/provisioning", handle(async (req, res) => {
+  if (!validBody(req.body, ["action"]) || !["provision", "verify", "retry"].includes(req.body.action)) {
+    fail(400, "Specify provision, verify, or retry.");
+  }
+  const id = identifier(req.params.id);
+  const action = req.body.action;
+  if (action === "retry") {
+    const attemptId = await transaction(async (client) => {
+      const { rows: [device] } = await client.query("SELECT * FROM gps_devices WHERE id=$1 FOR UPDATE", [id]);
+      if (!device) fail(404, "GPS device not found.");
+      if (!["failed", "conflict"].includes(device.provisioning_status)) fail(409, "No failed request to retry.");
+      const { rows: [prior] } = await client.query(
+        "SELECT mode,requested_provider_id FROM gps_provisioning_attempts WHERE device_id=$1 ORDER BY id DESC LIMIT 1", [id]
+      );
+      if (!prior) fail(409, "No provisioning history.");
+      return provisioning.enqueue(client, device, req.platformAuth.adminId, prior.mode,
+        "manual_retry_requested", prior.requested_provider_id);
+    });
+    return res.status(202).json({ attemptId });
+  }
+  const attemptId = await requestProvisioning(req, action, "reconciliation_requested");
+  res.status(202).json({ attemptId });
+}));
+
+router.get("/inventory/:id/provisioning", handle(async (req, res) => {
+  const id = identifier(req.params.id);
+  await getDetail(id);
+  res.json({ data: await provisioning.history(id) });
+}));
+
+router.get("/provisioning/diagnostics", handle(async (_req, res) => {
+  const { rows } = await pool.query("SELECT status,count(*)::int FROM gps_provisioning_attempts GROUP BY status");
+  res.json({ ...provisioning.diagnostics, counts: rows });
 }));
 
 router.patch("/inventory/:id/lifecycle", handle(async (req, res) => {
@@ -343,12 +337,14 @@ router.get("/inventory/:id/history", handle(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT e.id, e.action, e.details, e.created_at AS "createdAt",
             CASE WHEN e.platform_admin_id IS NOT NULL THEN 'platform'
-                 WHEN e.tenant_user_id IS NOT NULL THEN 'tenant' ELSE 'migration' END AS "actorType",
-            COALESCE(e.platform_admin_id, e.tenant_user_id) AS "actorId",
-            COALESCE(p.full_name, u.full_name) AS "actorName"
+                 WHEN e.tenant_user_id IS NOT NULL THEN 'tenant'
+                 WHEN e.reseller_admin_id IS NOT NULL THEN 'reseller' ELSE 'migration' END AS "actorType",
+            COALESCE(e.platform_admin_id, e.tenant_user_id, e.reseller_admin_id) AS "actorId",
+            COALESCE(p.full_name, u.full_name, r.full_name) AS "actorName"
      FROM gps_device_events e
      LEFT JOIN platform_admins p ON p.id = e.platform_admin_id
      LEFT JOIN users u ON u.id = e.tenant_user_id
+     LEFT JOIN reseller_admins r ON r.id = e.reseller_admin_id
      WHERE e.device_id = $1 AND ($2::bigint IS NULL OR e.id < $2)
      ORDER BY e.id DESC LIMIT 51`, [id, before]
   );

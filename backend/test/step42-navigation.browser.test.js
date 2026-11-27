@@ -20,6 +20,14 @@ test("Step 42 logout and invalidation navigate safely in Chrome", {
   };
   let rejectRestore=false;
   let submittedReseller;
+  let inventoryDevice;
+  let provisioningReads = 0;
+  let attempts = 0;
+  const setProvisioning = (status) => Object.assign(inventoryDevice, {
+    provisioningStatus: status,
+    allocationReady: status === "provisioned",
+    traccarDeviceId: status === "provisioned" ? "65" : null,
+  });
   const app=express();
   app.use(express.json());
   for (const [type,route] of [["tenant","/api/users/me"],["platform","/api/platform/auth/me"],["reseller","/api/reseller/auth/me"]]) {
@@ -33,7 +41,39 @@ test("Step 42 logout and invalidation navigate safely in Chrome", {
   app.get("/api/brands/:slug",(req,res)=>res.json({brand:{slug:req.params.slug,display_name:req.params.slug}}));
   app.get("/api/brands/host/:hostname",(_req,res)=>res.json({brand:{slug:"alpha",display_name:"Alpha domain"}}));
   app.get("/api/alerts/notifications/unread",(_req,res)=>res.json({count:0}));
-  app.get("/api/reseller/inventory",(_req,res)=>res.json({items:[]}));
+  app.get("/api/reseller/inventory",(_req,res)=>res.json({items:inventoryDevice ? [
+    {id:"10",device_name:"Reseller unverified fixture",lifecycle_status:"available",allocation_ready:false},
+  ] : []}));
+  app.get("/api/reseller/inventory/10/history",(_req,res)=>res.json({items:[
+    {action:"allocated",created_at:"2026-01-01T00:00:00Z"},
+  ]}));
+  app.get("/api/platform/devices/inventory", (_req,res)=>res.json({
+    data: inventoryDevice ? [inventoryDevice] : [], pagination:{limit:25,hasMore:false},traccarAvailable:true,
+  }));
+  app.post("/api/platform/devices/inventory",(req,res)=>{
+    inventoryDevice={id:"10",uniqueId:req.body.uniqueId,lifecycleStatus:"available",provisioningStatus:"pending"};
+    attempts++;
+    res.status(201).json(inventoryDevice);
+  });
+  app.get("/api/platform/devices/inventory/10",(req,res)=>{
+    provisioningReads++;
+    if(provisioningReads===2)setProvisioning("processing");
+    if(provisioningReads===3)setProvisioning("failed");
+    if(attempts===2)setProvisioning("provisioned");
+    res.json(inventoryDevice);
+  });
+  app.get("/api/platform/devices/inventory/10/provisioning",(_req,res)=>res.json({data:[
+    {id:"1",status:inventoryDevice.provisioningStatus,createdAt:"2026-01-01T00:00:00Z",attemptCount:1,
+      reason:inventoryDevice.provisioningStatus==="failed"?"Traccar is unavailable.":null,
+      events:[{id:"1",action:"provider_device_created",createdAt:"2026-01-01T00:00:02Z"}]},
+    ...[[0,"failed"],[2,"conflict"],[5,"failed"]].map(([attemptCount,status])=>({
+      id:String(attemptCount+2),status,attemptCount,createdAt:"2025-12-31T00:00:00Z",events:[],
+    })),
+  ]}));
+  app.post("/api/platform/devices/inventory/10/provisioning",(_req,res)=>{
+    attempts++;
+    res.sendStatus(202);
+  });
   app.get("/api/reseller/customers",(_req,res)=>res.json({items:[]}));
   app.get("/api/platform/alerts",(_req,res)=>res.json({ingestion:[],email:[],geofenceSync:[]}));
   app.get("/api/reports/vehicles",(_req,res)=>res.json({vehicles:[]}));
@@ -150,6 +190,46 @@ test("Step 42 logout and invalidation navigate safely in Chrome", {
     await clickLogout();await signedOut("/r/alpha/login");
     assert.equal(submittedReseller,"alpha");
     assert.equal(await ev("location.hostname"),"fleet.example.test");
+    await go("/login");
+    await loginPage();
+    await seed("platform");
+    await go("/platform/devices");
+    const button = (label) => `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)})`;
+    await wait("inventory loaded", "!!" + button("New device"));
+    await ev(button("New device") + ".click()");
+    await ev(`(()=>{const el=document.querySelector('input[name="uniqueId"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'000-browser-fixture');el.dispatchEvent(new Event('input',{bubbles:true}));el.form.requestSubmit();})()`);
+    const has = (label) => "document.body.innerText.includes(" + JSON.stringify(label) + ")";
+    await wait("registration pending", has("Pending"));
+    assert.equal(await ev(button("Allocate to tenant")+"?.disabled"),true);
+    await wait("registration processing", has("Processing"));
+    await wait("registration failure", has("Traccar is unavailable."));
+    await ev(button("Retry provisioning")+".click()");
+    await wait("provisioned after retry", has("Provisioned"));
+    await wait("mapping verification control", "!!"+button("Verify existing mapping"));
+    await wait("provisioned inventory row",has("Available \u00B7 Provisioned"));
+    await ev("[...document.querySelectorAll('summary')].find(s=>s.textContent==='Provisioning attempt history').click()");
+    for (const [theme, expected] of [["light","light"],["dark","dark"],["system","dark"]]) {
+      await cdp("Emulation.setEmulatedMedia",{features:[{name:"prefers-color-scheme",value:"dark"}]});
+      await ev(`(()=>{const control=document.querySelector('select[aria-label="Color theme"]');if(!control){
+        localStorage.setItem('sna-fleet.theme',${JSON.stringify(theme)});window.dispatchEvent(new StorageEvent('storage',{key:'sna-fleet.theme'}));return;}
+        control.value=${JSON.stringify(theme)};control.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      assert.equal(await ev("document.documentElement.dataset.theme"),expected);
+      const history=await ev("[...document.querySelectorAll('details[open]')].find(d=>d.querySelector('summary')?.textContent==='Provisioning attempt history').innerText");
+      for (const line of ["Provisioned \u00B7 1 run","Failed \u00B7 0 runs","Conflict requires review \u00B7 2 runs",
+        "Failed \u00B7 5 runs","\u00B7 provider device created"]) {
+        assert.ok(history.split("\n").some(row=>row.endsWith(line)),theme+": "+line);
+      }
+      assert.doesNotMatch(history,/ \? |\b1 runs\b/);
+    }
+    await cdp("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    assert.equal(await ev("document.documentElement.scrollWidth <= 390"),true);
+    await seed("reseller");
+    await go("/reseller/inventory");
+    await wait("reseller readiness",has("Platform provisioning required"));
+    assert.equal(await ev(has("Reseller unverified fixture \u00B7 available")),true);
+    await ev(button("History")+".click()");
+    await wait("reseller history",has("allocated \u00B7"));
+    assert.equal(await ev("Boolean("+button("Retry provisioning")+")"),false);
   } finally {
     ws?.close();
     chrome.kill();

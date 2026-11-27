@@ -8,7 +8,7 @@ const rateLimit=require("express-rate-limit");
 const pool=require("../config/db");
 const { requireAuth }=require("../middleware/auth.middleware");
 const { requirePlatformAuth }=require("../middleware/platform-auth.middleware");
-const { fail,parseId,transaction,changeAllocation,respondError }=require("../services/gps-inventory.service");
+const { fail,parseId,transaction,changeAllocation,requireProvisioned,respondError }=require("../services/gps-inventory.service");
 const R=require("../services/resellers");
 const { configStatus }=require("../services/company-invitation-email");
 const invitations=require("../services/reseller-invitations");
@@ -173,7 +173,8 @@ reseller.patch("/customers/:id/status",run(async(req,res)=>{
 
 platform.get("/:id/inventory",run(async(req,res)=>{
   const rid=id(req.params.id),search=R.text(req.query.q,100)??"";
-  res.json({items:await q(pool,`SELECT id,device_name,unique_identifier,lifecycle_status,reseller_id,tenant_id FROM gps_devices
+  res.json({items:await q(pool,`SELECT id,device_name,unique_identifier,lifecycle_status,reseller_id,tenant_id,
+      (provisioning_status='provisioned' AND traccar_device_id IS NOT NULL) AS allocation_ready FROM gps_devices
     WHERE (reseller_id=$1 OR (reseller_id IS NULL AND tenant_id IS NULL AND lifecycle_status='available'))
     AND ($2='' OR strpos(lower(coalesce(device_name,'')),lower($2))>0 OR strpos(lower(coalesce(unique_identifier,'')),lower($2))>0)
     ORDER BY (reseller_id=$1) DESC NULLS LAST,id DESC LIMIT 100`,[rid,search])});
@@ -185,16 +186,20 @@ platform.put("/:id/inventory/:deviceId",run(async(req,res)=>{
     const [r]=await q(db,"SELECT status FROM resellers WHERE id=$1 FOR SHARE",[rid]);
     if(!r)fail(404,"Reseller not found.");
     if(assign&&r.status!=="active")fail(409,"Activate the reseller first.");
-    const result=await db.query(`UPDATE gps_devices SET reseller_id=$3,updated_at=clock_timestamp()
-      WHERE id=$1 AND reseller_id IS NOT DISTINCT FROM $2::bigint AND tenant_id IS NULL AND lifecycle_status='available'`,
-    [did,assign?null:rid,assign?rid:null]);
-    if(!result.rowCount)fail(409,"Device is unavailable for this inventory change.");
+    const [device]=await q(db,`SELECT * FROM gps_devices WHERE id=$1
+      AND reseller_id IS NOT DISTINCT FROM $2::bigint AND tenant_id IS NULL
+      AND lifecycle_status='available' FOR UPDATE`,[did,assign?null:rid]);
+    if(!device)fail(409,"Device is unavailable for this inventory change.");
+    if(assign)requireProvisioned(device);
+    await db.query("UPDATE gps_devices SET reseller_id=$2,updated_at=clock_timestamp() WHERE id=$1",
+      [did,assign?rid:null]);
     await R.audit(db,rid,actor,assign?"inventory.assigned":"inventory.returned",did);
   });
   res.sendStatus(204);
 }));
 reseller.get("/inventory",run(async(req,res)=>{
-  res.json({items:await q(pool,`SELECT d.id,d.device_name,d.unique_identifier,d.lifecycle_status,d.tenant_id,t.name AS customer
+  res.json({items:await q(pool,`SELECT d.id,d.device_name,d.unique_identifier,d.lifecycle_status,d.tenant_id,t.name AS customer,
+    (d.provisioning_status='provisioned' AND d.traccar_device_id IS NOT NULL) AS allocation_ready
     FROM gps_devices d LEFT JOIN tenants t ON t.id=d.tenant_id AND t.reseller_id=d.reseller_id
     WHERE d.reseller_id=$1 ORDER BY d.id DESC LIMIT 100`,[partner(req)])});
 }));

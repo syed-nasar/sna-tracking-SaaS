@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { platformApi } from "../../services/api";
 import { PageHeader } from "../../components/WorkspaceUi";
 
 const endpoint = "/platform/devices/inventory";
+const separator = " \u00B7 ";
 const statuses = ["available", "reserved", "installed", "faulty", "retired"];
+const provisioningLabels = { legacy: "Unverified legacy mapping", pending: "Pending", processing: "Processing",
+  retry: "Retry scheduled", provisioned: "Provisioned", failed: "Failed", conflict: "Conflict requires review" };
+const provisioningActive = (status) => ["pending", "processing", "retry"].includes(status);
 const input = "field-control";
 const panel = "min-w-0 space-y-4 rounded-panel border border-line bg-panel p-4 shadow-panel sm:p-5";
 const action = "control";
@@ -178,7 +182,7 @@ function InstallationControls({ device, url, busy, mutate }) {
   return (
     <section className="space-y-3">
       <label className="block space-y-1">Install on vehicle
-        <select className={input} value={vehicleId} disabled={busy} onChange={(event) => setVehicleId(event.target.value)}>
+        <select className={input} value={vehicleId} disabled={busy || !device.allocationReady} onChange={(event) => setVehicleId(event.target.value)}>
           <option value="">Select vehicle</option>
           {vehicles.filter((vehicle) => vehicle.id !== device.vehicleId).map((vehicle) => (
             <option key={vehicle.id} value={vehicle.id}>
@@ -188,7 +192,7 @@ function InstallationControls({ device, url, busy, mutate }) {
         </select>
       </label>
       <div className="flex flex-wrap gap-2">
-        <button className={action} disabled={busy || !target} onClick={async () => {
+        <button className={action} disabled={busy || !target || !device.allocationReady} onClick={async () => {
           if (await mutate("put", "/installation", { vehicleId, expectedDeviceId: target.traccarDeviceId })) setVehicleId("");
         }}>{device.vehicleId ? "Move installation" : "Install device"}</button>
         {device.vehicleId && (
@@ -209,6 +213,8 @@ function DeviceDetails({ id, onClose, onChanged }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [tenantId, setTenantId] = useState("");
+  const [attempts, setAttempts] = useState([]);
+  const [pollPaused, setPollPaused] = useState(false);
   const url = `${endpoint}/${id}`;
   const transitions = {
     available: ["faulty", "retired"],
@@ -220,12 +226,28 @@ function DeviceDetails({ id, onClose, onChanged }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    platformApi.get(url, { signal: controller.signal }).then(({ data }) => setDevice(data))
-      .catch((error) => {
+    let timer;
+    let polls = 0;
+    const load = async () => {
+      try {
+        const [{ data }, { data: history }] = await Promise.all([
+          platformApi.get(url, { signal: controller.signal }),
+          platformApi.get(`${url}/provisioning`, { signal: controller.signal }),
+        ]);
+        if (controller.signal.aborted) return;
+        setDevice(data);
+        setAttempts(history.data);
+        if (provisioningActive(data.provisioningStatus)) {
+          if (++polls < 30) timer = setTimeout(load, 4000);
+          else setPollPaused(true);
+        } else if (polls) onChanged();
+      } catch (error) {
         if (!controller.signal.aborted) setError(error.response?.data?.message || "Could not load device.");
-      });
-    return () => controller.abort();
-  }, [url, revision]);
+      }
+    };
+    void load();
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [url, revision, onChanged]);
 
   async function mutate(method, suffix, data) {
     setBusy(true);
@@ -233,9 +255,10 @@ function DeviceDetails({ id, onClose, onChanged }) {
     setNotice("");
     try {
       await platformApi.request({ method, url: url + suffix, data });
+      setPollPaused(false);
       setRevision((value) => value + 1);
       onChanged();
-      setNotice("Device updated.");
+      setNotice(["/link", "/provisioning"].includes(suffix) ? "Provisioning request queued." : "Device updated.");
       return true;
     } catch (error) {
       setError(error.response?.data?.message || "Could not update device.");
@@ -261,11 +284,45 @@ function DeviceDetails({ id, onClose, onChanged }) {
             <div><dt className="text-muted">Live GPS status</dt><dd className="capitalize">{device.gpsStatus}</dd></div>
             <div><dt className="text-muted">Allocated tenant</dt><dd className="break-words">{device.tenantName || "Unallocated"}</dd></div>
             <div><dt className="text-muted">Installed vehicle</dt><dd className="break-words">{device.vehicleName || "Uninstalled"}</dd></div>
+            <div><dt className="text-muted">Provisioning</dt><dd role="status">{provisioningLabels[device.provisioningStatus]}</dd></div>
+            <div><dt className="text-muted">Last verified</dt><dd>{device.providerVerifiedAt ? new Date(device.providerVerifiedAt).toLocaleString() : "Unavailable"}</dd></div>
             <div><dt className="text-muted">Traccar ID</dt><dd>{device.traccarDeviceId || "Unlinked"}</dd></div>
             <div><dt className="text-muted">Installed at</dt><dd>{device.installedAt ? new Date(device.installedAt).toLocaleString() : "Unavailable"}</dd></div>
           </dl>
+          <section className="space-y-2" aria-label="GPS provisioning">
+            {!device.allocationReady && <p className="text-sm text-muted">Verify provisioning before assigning, allocating, or installing this device.</p>}
+            {attempts[0]?.reason && <p className="text-sm text-caution">{attempts[0].reason}</p>}
+            {(pollPaused || error) && <button type="button" className={action} onClick={() => {
+              setPollPaused(false);
+              setError("");
+              setRevision((value) => value + 1);
+            }}>Refresh provisioning status</button>}
+            {!provisioningActive(device.provisioningStatus) && !["retired", "faulty"].includes(device.lifecycleStatus) && (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={action} disabled={busy} onClick={() => mutate("post", "/provisioning", {
+                  action: device.traccarDeviceId ? "verify" : "provision",
+                })}>{device.traccarDeviceId ? "Verify existing mapping" : "Provision device"}</button>
+                {["failed", "conflict"].includes(device.provisioningStatus) && (
+                  <button type="button" className={action} disabled={busy}
+                    onClick={() => mutate("post", "/provisioning", { action: "retry" })}>Retry provisioning</button>
+                )}
+              </div>
+            )}
+            {!!attempts.length && <details>
+              <summary className="cursor-pointer text-sm">Provisioning attempt history</summary>
+              <ul className="space-y-2 py-2 text-sm">{attempts.map((attempt) => (
+                <li key={attempt.id}>
+                  <p>{new Date(attempt.createdAt).toLocaleString()}{separator}{provisioningLabels[attempt.status]}{separator}{attempt.attemptCount} {attempt.attemptCount === 1 ? "run" : "runs"}</p>
+                  {attempt.reason && <p className="text-muted">{attempt.reason}</p>}
+                  <ul className="ps-4 text-muted">{attempt.events.map((event) => (
+                    <li key={event.id}>{new Date(event.createdAt).toLocaleString()}{separator}{event.action.replaceAll("_", " ")}</li>
+                  ))}</ul>
+                </li>
+              ))}</ul>
+            </details>}
+          </section>
           <DeviceForm key={revision} device={device} busy={busy} onSave={(data) => mutate("patch", "", data)} />
-          {(!device.traccarDeviceId || !device.identifierVerified) && device.lifecycleStatus !== "retired" && (
+          {(!device.traccarDeviceId || !device.identifierVerified) && !provisioningActive(device.provisioningStatus) && !["retired", "faulty"].includes(device.lifecycleStatus) && (
             <form className="space-y-2 border-t border-line pt-4" onSubmit={(event) => {
               event.preventDefault();
               const traccarDeviceId = new FormData(event.currentTarget).get("traccarDeviceId");
@@ -279,8 +336,8 @@ function DeviceDetails({ id, onClose, onChanged }) {
           )}
           {["available", "reserved"].includes(device.lifecycleStatus) && (
             <section className="space-y-2 border-t border-line pt-4">
-              <TenantChoice key={device.tenantId || "unallocated"} disabled={busy} onChoose={setTenantId} />
-              <button className={action} disabled={busy || !tenantId || tenantId === device.tenantId}
+              <TenantChoice key={device.tenantId || "unallocated"} disabled={busy || !device.allocationReady} onChoose={setTenantId} />
+              <button className={action} disabled={busy || !device.allocationReady || !tenantId || tenantId === device.tenantId}
                 onClick={async () => {
                   if (await mutate("patch", "/allocation", {
                     action: device.tenantId ? "transfer" : "allocate", tenantId,
@@ -324,7 +381,8 @@ export default function DeviceInventoryPage() {
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const refresh = () => setRevision((current) => current + 1);
+  const refresh = useCallback(() => setRevision((current) => current + 1), []);
+  const [registrationNotice, setRegistrationNotice] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -343,6 +401,7 @@ export default function DeviceInventoryPage() {
       const response = await platformApi.post(endpoint, data);
       setCreating(false);
       setSelected(response.data.id);
+      setRegistrationNotice("Inventory registered. SNA will provision it before allocation.");
       refresh();
     } catch (error) {
       setError(error.response?.data?.message || "Could not add device.");
@@ -358,6 +417,7 @@ export default function DeviceInventoryPage() {
         <PageHeader title="GPS Device Inventory" compact>
           <button className={primary} onClick={() => { setCreating(true); setSelected(null); }}>New device</button>
         </PageHeader>
+        {registrationNotice && <p role="status" className="text-positive">{registrationNotice}</p>}
         {error && <p role="alert" className="text-negative">{error}</p>}
         {result?.traccarAvailable === false && <p role="status" className="text-caution">Traccar is unavailable. Inventory records are still accessible.</p>}
         <div className="grid items-start gap-5 xl:grid-cols-2">
@@ -383,7 +443,7 @@ export default function DeviceInventoryPage() {
                   <button className="flex w-full flex-wrap items-start justify-between gap-2 text-left hover:text-accent"
                     onClick={() => { setSelected(device.id); setCreating(false); }}>
                     <span className="min-w-0 break-words font-medium">{device.deviceName || device.uniqueId || `Device #${device.id}`}</span>
-                    <span className="text-sm capitalize text-accent">{device.lifecycleStatus}</span>
+                    <span className="text-sm capitalize text-accent">{device.lifecycleStatus}{separator}{provisioningLabels[device.provisioningStatus]}</span>
                   </button>
                   <p className="break-words text-sm text-muted">
                     {[device.uniqueId, device.tenantName, device.vehicleName].filter(Boolean).join(" · ") || "Unallocated"}

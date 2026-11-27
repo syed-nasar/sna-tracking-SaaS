@@ -227,7 +227,7 @@ export default function ResellerWorkspace({platform=false,onboard=false}){
           {inv?.error&&<StateNotice error>{inv.error}</StateNotice>}
           <ul className="divide-y divide-line">{inv?.data?.items.map(d=><li key={d.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
             <span className="grow">{d.device_name||d.unique_identifier||`Device ${d.id}`} · {d.lifecycle_status}</span>
-            {d.lifecycle_status==="available"&&<button className={button} type="button" disabled={busy} onClick={()=>operate(()=>
+            {d.lifecycle_status==="available"&&<button className={button} type="button" disabled={busy || (!d.reseller_id && !d.allocation_ready)} onClick={()=>operate(()=>
               client.put(`${base}/inventory/${d.id}`,{assign:d.reseller_id==null}),"Change reseller inventory assignment?")}>{d.reseller_id?"Return to platform":"Assign to reseller"}</button>}
           </li>)}</ul>
         </section>
@@ -240,7 +240,8 @@ export default function ResellerWorkspace({platform=false,onboard=false}){
       <ul className="divide-y divide-line">{listed.map(d=><li key={d.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
         <span className="grow">{d.device_name||d.unique_identifier||`Device ${d.id}`} · {d.lifecycle_status}{d.customer?` · ${d.customer}`:""}</span>
         <button className={button} type="button" onClick={()=>operate(async()=>{setHistory((await client.get(`${base}/inventory/${d.id}/history`)).data.items);})}>History</button>
-        {d.lifecycle_status==="available"&&<form className="flex flex-wrap gap-2" onSubmit={e=>{
+        {!d.allocation_ready&&d.lifecycle_status==="available"&&<span className="text-muted">Platform provisioning required</span>}
+        {d.lifecycle_status==="available"&&d.allocation_ready&&<form className="flex flex-wrap gap-2" onSubmit={e=>{
           e.preventDefault();const tenantId=new FormData(e.currentTarget).get("tenantId");
           void operate(()=>client.post(`${base}/inventory/${d.id}/allocation`,{tenantId}),"Allocate this available device?");
         }}>
