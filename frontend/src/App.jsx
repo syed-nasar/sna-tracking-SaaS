@@ -23,6 +23,11 @@ import FleetOperationsPage from "./pages/FleetOperationsPage";
 import CustomerDevicesPage from "./pages/CustomerDevicesPage";
 
 import PlatformDashboard from "./pages/platform/PlatformDashboard";
+import PlatformCustomers from "./pages/platform/PlatformCustomers";
+import PlatformVehicles from "./pages/platform/PlatformVehicles";
+import PlatformOperations from "./pages/platform/PlatformOperations";
+import PlatformHealth from "./pages/platform/PlatformHealth";
+import PlatformAudit from "./pages/platform/PlatformAudit";
 import TenantDetails from "./pages/platform/TenantDetails";
 import CompanyOnboarding from "./pages/platform/CompanyOnboarding";
 import InvitationAcceptance from "./pages/InvitationAcceptance";
@@ -81,6 +86,7 @@ export default function App() {
           element={<InvitationAcceptance />}
         />
         <Route path="/r/:brandSlug/login" element={<LoginPage key="branded-login" />} />
+        <Route path="/r/:brandSlug/reseller/login" element={<LoginPage key="branded-reseller-login" type="reseller" />} />
         <Route path="/r/:brandSlug/accept-invitation" element={<InvitationAcceptance key="branded-acceptance" />} />
         <Route path="/r/:brandSlug/activate-admin" element={<InvitationAcceptance key="reseller-acceptance" reseller />} />
         <Route path="/reseller/login" element={<LoginPage key="reseller-login" type="reseller" />} />
@@ -128,6 +134,11 @@ export default function App() {
             <Route path="/platform/connectivity" element={<DeferredPage><SimConnectivityPage /></DeferredPage>} />
             <Route path="/platform/billing" element={<DeferredPage><BillingPage /></DeferredPage>} />
             <Route path="/platform/dashboard" element={<PlatformDashboard />} />
+            <Route path="/platform/customers" element={<PlatformCustomers />} />
+            <Route path="/platform/vehicles" element={<PlatformVehicles />} />
+            <Route path="/platform/operations" element={<PlatformOperations />} />
+            <Route path="/platform/health" element={<PlatformHealth />} />
+            <Route path="/platform/audit" element={<PlatformAudit />} />
             <Route path="/platform/alerts" element={<PlatformAlertDiagnostics />} />
             <Route path="/platform/tenants/new" element={<CompanyOnboarding />} />
             <Route path="/platform/tenants/:id" element={<TenantDetails />} />

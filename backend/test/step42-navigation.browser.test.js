@@ -38,7 +38,8 @@ test("Step 42 logout and invalidation navigate safely in Chrome", {
     res.json({accessToken:valid(),user:profiles.tenant});
   });
   app.get("/api/tenant-brand",(_req,res)=>res.json({brand:null}));
-  app.get("/api/brands/:slug",(req,res)=>res.json({brand:{slug:req.params.slug,display_name:req.params.slug}}));
+  app.get("/api/brands/:slug",(req,res)=>res.json({brand:{slug:req.params.slug,display_name:req.params.slug,
+    primary_color:req.params.slug==="tracknova"?"#184c76":"#79257a",assets:["logo","dark-logo"]}}));
   app.get("/api/brands/host/:hostname",(_req,res)=>res.json({brand:{slug:"alpha",display_name:"Alpha domain"}}));
   app.get("/api/alerts/notifications/unread",(_req,res)=>res.json({count:0}));
   app.get("/api/reseller/inventory",(_req,res)=>res.json({items:inventoryDevice ? [
@@ -63,8 +64,8 @@ test("Step 42 logout and invalidation navigate safely in Chrome", {
     res.json(inventoryDevice);
   });
   app.get("/api/platform/devices/inventory/10/provisioning",(_req,res)=>res.json({data:[
-    {id:"1",status:inventoryDevice.provisioningStatus,createdAt:"2026-01-01T00:00:00Z",attemptCount:1,
-      reason:inventoryDevice.provisioningStatus==="failed"?"Traccar is unavailable.":null,
+    {id:"1",status:attempts===2?"provisioned":inventoryDevice.provisioningStatus,createdAt:"2026-01-01T00:00:00Z",attemptCount:1,
+      reason:attempts!==2&&inventoryDevice.provisioningStatus==="failed"?"Traccar is unavailable.":null,
       events:[{id:"1",action:"provider_device_created",createdAt:"2026-01-01T00:00:02Z"}]},
     ...[[0,"failed"],[2,"conflict"],[5,"failed"]].map(([attemptCount,status])=>({
       id:String(attemptCount+2),status,attemptCount,createdAt:"2025-12-31T00:00:00Z",events:[],
@@ -75,6 +76,65 @@ test("Step 42 logout and invalidation navigate safely in Chrome", {
     res.sendStatus(202);
   });
   app.get("/api/reseller/customers",(_req,res)=>res.json({items:[]}));
+  let resellerCustomer={id:"8",name:"Reseller customer fixture",slug:"reseller-customer",status:"active",
+    customer_type:"business",version:"31",recent_activity:[]};
+  app.get("/api/reseller/customers/8",(_req,res)=>res.json(resellerCustomer));
+  app.patch("/api/reseller/customers/8/status",(req,res)=>{
+    const {status}=req.body;
+    resellerCustomer={...resellerCustomer,status,version:String(Number(resellerCustomer.version)+1),
+      recent_activity:[{id:status,action:"customer."+status,created_at:"2026-01-01T00:00:00Z"},
+        ...resellerCustomer.recent_activity]};
+    res.json({status,version:resellerCustomer.version});
+  });
+  app.get("/api/platform/tenants",(req,res)=>res.json({
+    data:[{id:"9",name:"Directory fixture",slug:"directory-fixture",status:"active",customer_type:"business"}],
+    pagination:{limit:50,offset:0,total:1,hasMore:false},
+  }));
+  let lifecycleStatus="active";
+  let lifecycleActivity=[];
+  app.patch("/api/platform/tenants/9/status",(req,res)=>{
+    lifecycleStatus=req.body.status;
+    lifecycleActivity=[{id:lifecycleStatus,action:"tenant."+lifecycleStatus,created_at:"2026-01-01T00:00:00Z"},...lifecycleActivity];
+    res.json({status:lifecycleStatus,version:lifecycleStatus==="active"?"14":"13"});
+  });
+  app.get("/api/platform/tenants/9",(_req,res)=>res.json({
+    id:"9",name:"Directory fixture",slug:"directory-fixture",status:lifecycleStatus,customer_type:"business",version:"12",
+    vehicle_count:2,active_vehicle_count:1,allocated_gps_count:1,installed_gps_count:1,
+    administrators:[{id:"15",full_name:"Fixture administrator",email:"admin@example.test",is_active:true}],
+    recent_activity:lifecycleActivity,
+  }));
+  app.get("/api/platform/ops/summary",(_req,res)=>res.json({
+    generatedAt:"2026-01-01T00:00:00Z",customers:{total:61},resellers:{total:1},
+    vehicles:{total:12,active:11,with_gps:9,without_gps:3,unverified_history:2},gps:{total:12},
+    provisioning:{counts:{failed:1},oldest_work_at:null},
+  }));
+  app.get("/api/platform/ops/vehicles",(_req,res)=>res.json({
+    data:[{id:"9",name:"Vehicle fixture",status:"active",customer_name:"Directory fixture",tenant_id:"9",customer_type:"business"}],
+    pagination:{limit:50,offset:0,total:1,hasMore:false},
+  }));
+  app.get("/api/platform/ops/provisioning",(_req,res)=>res.json({
+    data:[{id:"10",device_name:"Blocked tracker fixture",provisioning_status:"failed",lifecycle_status:"available",age_seconds:360}],
+    pagination:{limit:25,offset:0,hasMore:false},
+  }));
+  app.get("/api/platform/ops/invitations",(_req,res)=>res.json({
+    data:[{id:"1",kind:"customer",tenant_id:"9",target:"Delivery fixture",status:"uncertain",attempts:1,age_seconds:360}],
+    pagination:{limit:25,offset:0,hasMore:false},
+  }));
+  app.get("/api/platform/ops/signals",(_req,res)=>res.json({
+    sim:{status:"unavailable"},billing:{status:"unavailable"},alerts:{status:"unavailable"},
+  }));
+  app.get("/api/platform/ops/health",(_req,res)=>res.json(Object.fromEntries(
+    ["api","postgres","traccar","gps","alerts","customerEmail","resellerEmail"].map(key=>[key,{
+      status:key==="traccar"?"unavailable":"healthy",checkedAt:"2026-01-01T00:00:00Z",
+    }])
+  )));
+  app.get("/api/platform/ops/audit",(_req,res)=>res.json({
+    data:[{id:"platform:1",at:"2026-01-01T00:00:00Z",domain:"customers",action:"fixture.updated",actor_type:"platform"}],
+    nextCursor:null,
+  }));
+  app.get("/api/platform/billing/report",(_req,res)=>res.json({
+    from:"2026-01-01",to:"2026-01-01",active:0,upcoming:0,currencies:[],renewals:[],
+  }));
   app.get("/api/platform/alerts",(_req,res)=>res.json({ingestion:[],email:[],geofenceSync:[]}));
   app.get("/api/reports/vehicles",(_req,res)=>res.json({vehicles:[]}));
   app.use("/api",(_req,res)=>res.json([]));
@@ -136,9 +196,44 @@ test("Step 42 logout and invalidation navigate safely in Chrome", {
     };
     const protectedPaths={tenant:"/reports",reseller:"/reseller/inventory",platform:"/platform/alerts"};
     await go("/login");await loginPage();
+    const platformLoginLink="Boolean(document.querySelector('main a[href=\"/platform/login\"]'))";
+    assert.equal(await ev(platformLoginLink),true);
     await go("/platform/alerts");await wait("platform guard",at("/platform/login"));
     await go("/reseller/inventory");await wait("reseller guard",at("/reseller/login"));
+    await loginPage();
+    assert.equal(await ev("document.querySelector('#tenantSlug').value"),"");
     await go("/reports");await signedOut("/login");
+    const clickLoginLink=label=>ev(`[...document.querySelectorAll('a')].find(a=>a.textContent.trim()===${JSON.stringify(label)}).click()`);
+    for(const slug of ["tracknova","fleetorbit"]){
+      const customerPath=`/r/${slug}/login`,adminPath=`/r/${slug}/reseller/login`;
+      await go(customerPath);
+      await wait("customer branding "+slug,`document.title===${JSON.stringify(slug)}`);
+      assert.equal(await ev(platformLoginLink),false);
+      await clickLoginLink("Reseller Administrator Login");
+      const brandedAdmin=at(adminPath)+` && document.title===${JSON.stringify(slug)} &&
+        document.querySelector('#tenantSlug')?.value===${JSON.stringify(slug)}`;
+      await wait("branded reseller login "+slug,brandedAdmin);
+      await cdp("Page.reload");
+      await wait("branded reseller login after reload "+slug,brandedAdmin);
+      assert.equal(await ev(platformLoginLink),false);
+      for(const [theme,expected] of [["light","light"],["dark","dark"],["system","dark"]]){
+        await cdp("Emulation.setEmulatedMedia",{features:[{name:"prefers-color-scheme",value:"dark"}]});
+        await ev(`(()=>{const select=document.querySelector('select[aria-label="Color theme"]');
+          select.value=${JSON.stringify(theme)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+        assert.equal(await ev("document.documentElement.dataset.theme"),expected);
+        assert.equal(await ev("document.querySelector('.reseller-branded').style.getPropertyValue('--brand-primary')"),
+          slug==="tracknova"?"#184c76":"#79257a");
+        const logo=expected==="dark"?"dark-logo":"logo";
+        assert.equal(await ev(`[...document.images].some(img=>img.getAttribute('src').endsWith(${JSON.stringify(`/brands/${slug}/assets/${logo}`)}) &&
+          getComputedStyle(img).display!=='none')`),true);
+      }
+      await ev("history.back()");
+      await wait("back to fleet login "+slug,at(customerPath));
+      await ev("history.forward()");
+      await wait("forward to reseller login "+slug,brandedAdmin);
+      await clickLoginLink("Switch to Fleet Login");
+      await wait("switch to fleet login "+slug,at(customerPath));
+    }
     for(const [type,slug,customerType,destination] of [
       ["tenant",null,"personal","/login"],["tenant",null,"business","/login"],["platform",null,null,"/login"],
       ["tenant","alpha","personal","/r/alpha/login"],["tenant","alpha","business","/r/alpha/login"],
@@ -183,8 +278,12 @@ test("Step 42 logout and invalidation navigate safely in Chrome", {
     await cdp("Page.reload");await loginPage();
     assert.equal(await ev(`sessionStorage.getItem('${storageKey}')`),null);
     rejectRestore=false;
-    await go("http://fleet.example.test:"+server.address().port+"/login");
+    const domainOrigin="http://fleet.example.test:"+server.address().port;
+    await go(domainOrigin+"/reseller/login");
+    await wait("custom domain reseller context","document.title==='Alpha domain' && document.querySelector('#tenantSlug')?.value==='alpha'");
+    await go(domainOrigin+"/login");
     await wait("domain context","document.title==='Alpha domain'");
+    assert.equal(await ev(platformLoginLink),false);
     await ev(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Business').click()`);
     await submitBusiness();
     await clickLogout();await signedOut("/r/alpha/login");
@@ -230,6 +329,79 @@ test("Step 42 logout and invalidation navigate safely in Chrome", {
     await ev(button("History")+".click()");
     await wait("reseller history",has("allocated \u00B7"));
     assert.equal(await ev("Boolean("+button("Retry provisioning")+")"),false);
+    await go("/reseller/customers/8");
+    await wait("reseller customer details",has("Reseller customer fixture"));
+    await ev("window.confirm=()=>true; window.prompt=()=> 'Browser reseller lifecycle fixture';");
+    for(const [action,event] of [["Suspend customer","customer suspended"],["Reactivate customer","customer active"]]){
+      await wait(action,`!!${button(action)} && !${button(action)}.disabled`);
+      await ev(button(action)+".click()");
+      await wait("reseller activity refreshed "+event,has(event));
+    }
+    assert.equal(await ev("Boolean(document.querySelector('nav a[href=\"/platform/vehicles\"]'))"),false);
+    await go("/platform/vehicles");
+    await wait("reseller cannot open platform vehicle directory",at("/platform/login"));
+    await seed("platform");
+    for(const [route,contents] of [
+      ["/platform/dashboard","Summary generated"],
+      ["/platform/customers","Directory fixture"],
+      ["/platform/tenants/9","Fixture administrator"],
+      ["/platform/operations","Blocked tracker fixture"],
+      ["/platform/operations?queue=invitations","Delivery fixture"],
+      ["/platform/health","PostgreSQL"],
+      ["/platform/audit","fixture.updated"],
+    ]){
+      await go(route);
+      await wait(route,has(contents));
+      assert.equal(await ev("document.documentElement.scrollWidth <= 390"),true,route);
+    }
+    await go("/platform/dashboard");
+    await wait("vehicle KPI links", "document.querySelectorAll('main a[href^=\"/platform/vehicles\"]').length === 5");
+    for(const filter of ["","?status=active","?gps=installed","?gps=uninstalled","?gps=unverified"]){
+      const path="/platform/vehicles"+filter;
+      await go("/platform/dashboard");
+      const link=`[...document.querySelectorAll('main a')].find(a=>a.getAttribute('href')===${JSON.stringify(path)})`;
+      await wait("KPI link "+path,"!!"+link);
+      await ev(link+".click()");
+      await wait("directory navigation "+path,`location.pathname+location.search===${JSON.stringify(path)} && ${has("Vehicle fixture")}`);
+    }
+    await cdp("Emulation.setDeviceMetricsOverride",{width:1350,height:900,deviceScaleFactor:1,mobile:false});
+    await go("/platform/dashboard");
+    const vehicleNav="document.querySelector('aside nav a[href=\"/platform/vehicles\"]')";
+    const vehicleHeader="document.querySelector('.workspace-topbar [title=\"Vehicle Directory\"]')?.textContent==='Vehicle Directory'";
+    const directoryActive=`${at("/platform/vehicles")} && ${vehicleHeader} &&
+      [...document.querySelectorAll('aside nav a[aria-current="page"]')].map(a=>a.textContent.trim()).join(',')==='Vehicles'`;
+    await wait("sidebar Vehicles",`!!${vehicleNav}`);
+    assert.equal(await ev(vehicleNav+".previousElementSibling.textContent.trim()"),"Resellers");
+    await ev(vehicleNav+".click()");
+    await wait("vehicle navigation and header",directoryActive);
+    await ev("history.back()");
+    await wait("back to dashboard",at("/platform/dashboard"));
+    await ev("history.forward()");
+    await wait("forward to vehicle directory",directoryActive);
+    await ev("document.querySelector('[aria-label=\"Collapse sidebar\"]').click()");
+    await wait("collapsed Vehicles active label",vehicleNav+".getAttribute('aria-label')==='Vehicles' && "+
+      vehicleNav+".getAttribute('aria-current')==='page'");
+    await cdp("Page.reload");
+    await wait("direct directory reload with collapsed sidebar",vehicleHeader+" && "+
+      vehicleNav+"?.getAttribute('aria-current')==='page' && "+vehicleNav+"?.getAttribute('aria-label')==='Vehicles'");
+    await ev("document.querySelector('[aria-label=\"Expand sidebar\"]').click()");
+    await wait("expanded Vehicle Directory",directoryActive);
+    for(const [theme,expected] of [["light","light"],["dark","dark"],["system","dark"]]){
+      await cdp("Emulation.setEmulatedMedia",{features:[{name:"prefers-color-scheme",value:"dark"}]});
+      await ev(`(()=>{const select=document.querySelector('select[aria-label="Color theme"]');
+        select.value=${JSON.stringify(theme)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await wait("vehicle directory "+theme,directoryActive+` && document.documentElement.dataset.theme==='${expected}'`);
+    }
+    await go("/platform/tenants/9");
+    await wait("customer details",has("Fixture administrator"));
+    await ev("window.confirm=()=>true; window.prompt=()=> 'Browser lifecycle fixture';");
+    for(const [action,event] of [["Suspend Customer","tenant.suspended"],["Activate Customer","tenant.active"]]){
+      const control=`[...document.querySelectorAll('button')].find(b=>b.textContent.trim().toLowerCase()===${JSON.stringify(action.toLowerCase())})`;
+      await wait(action,`!!${control} && !${control}.disabled`);
+      await ev(control+".click()");
+      await wait("activity refreshed "+event,has(event));
+      assert.equal(await ev(has("Trackers 1 allocated, 1 installed")),true);
+    }
   } finally {
     ws?.close();
     chrome.kill();

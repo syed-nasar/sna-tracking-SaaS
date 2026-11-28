@@ -1,6 +1,9 @@
 
 const express = require("express");
 const pool = require("../config/db");
+const { customers,detail } = require("../services/platform-customers.service");
+const { changeCustomerStatus } = require("../services/customer-lifecycle.service");
+const { fail,transaction,respondError } = require("../services/gps-inventory.service");
 
 const platformOnboardingRouter = require(
   "./platform-onboarding.routes"
@@ -17,6 +20,7 @@ const {
 const router = express.Router();
 
 router.use(requirePlatformAuth);
+router.use((_req,res,next)=>{ res.set("Cache-Control","private, no-store"); next(); });
 router.use("/onboard", platformOnboardingRouter);
 router.use("/", platformInvitationRouter);
 
@@ -26,12 +30,6 @@ const SELECT_FIELDS = `
   id, name, slug, email, phone, status,
   customer_type, created_at, updated_at
 `;
-
-const VALID_STATUSES = [
-  "active",
-  "suspended",
-  "inactive",
-];
 
 const VALID_CUSTOMER_TYPES = [
   "personal",
@@ -70,76 +68,30 @@ async function audit(client, adminId, action, tenantId, details) {
   );
 }
 
-// GET /api/platform/tenants
-router.get("/", async (req, res) => {
-  try {
-    const limit = 50;
-    const offset = Number(req.query.offset || 0);
-
-    if (
-      !Number.isSafeInteger(offset) ||
-      offset < 0 ||
-      offset > 1000000
-    ) {
-      return res.status(400).json({
-        message: "Invalid pagination offset",
-      });
-    }
-
-    const result = await pool.query(
-      `SELECT ${SELECT_FIELDS}
-       FROM tenants
-       ORDER BY id
-       LIMIT $1 OFFSET $2`,
-      [limit, offset]
-    );
-
-    return res.json({
-      data: result.rows,
-      pagination: {
-        limit,
-        offset,
-        returned: result.rows.length,
-      },
-    });
-  } catch (error) {
-    console.error("List tenants failed:", error.message);
-    return res.status(500).json({
-      message: "Failed to list tenants",
-    });
-  }
+router.get("/", async (req,res) => {
+  try { res.json(await customers(req.query)); } catch (error) { respondError(res,error); }
 });
 
-// GET /api/platform/tenants/:id
-router.get("/:id", async (req, res) => {
+router.get("/:id", async (req,res) => {
   const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({message:"Invalid tenant ID."});
+  try { res.json(await detail(id)); } catch (error) { respondError(res,error); }
+});
 
-  if (!id) {
-    return res.status(400).json({
-      message: "Invalid tenant ID",
-    });
-  }
-
+router.patch("/:id/status", async (req,res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({message:"Invalid tenant ID."});
   try {
-    const result = await pool.query(
-      `SELECT ${SELECT_FIELDS}
-       FROM tenants WHERE id = $1`,
-      [id]
-    );
-
-    if (!result.rows.length) {
-      return res.status(404).json({
-        message: "Tenant not found",
-      });
-    }
-
-    return res.json(result.rows[0]);
-  } catch (error) {
-    console.error("Get tenant failed:", error.message);
-    return res.status(500).json({
-      message: "Failed to retrieve tenant",
-    });
-  }
+    res.json(await transaction(async db => {
+      const {rowCount}=await db.query(
+        "SELECT id FROM platform_admins WHERE id=$1 AND is_active AND role='super_admin' FOR SHARE",
+        [req.platformAuth.adminId]
+      );
+      if (!rowCount) fail(403,"Platform administrator access denied.");
+      return changeCustomerStatus(db,id,null,req.body,(client,details) =>
+        audit(client,req.platformAuth.adminId,`tenant.${details.toStatus}`,id,details));
+    }));
+  } catch (error) { respondError(res,error); }
 });
 
 // POST /api/platform/tenants
@@ -262,11 +214,11 @@ router.patch("/:id", async (req, res) => {
     });
   }
 
+  if (Object.hasOwn(body,"status")) return res.status(400).json({ message:"Use the customer status action." });
   const allowed = [
     "name",
     "email",
     "phone",
-    "status",
     "customer_type",
   ];
 
@@ -291,8 +243,6 @@ router.patch("/:id", async (req, res) => {
     (body.phone !== undefined &&
       body.phone !== null &&
       !validText(body.phone, 30)) ||
-    (body.status !== undefined &&
-      !VALID_STATUSES.includes(body.status)) ||
     (body.customer_type !== undefined &&
       !VALID_CUSTOMER_TYPES.includes(body.customer_type))
   ) {
@@ -320,17 +270,19 @@ router.patch("/:id", async (req, res) => {
     }
 
     const oldTenant = previous.rows[0];
+    if (body.customer_type !== undefined && body.customer_type !== oldTenant.customer_type) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({message:"Customer account-type conversion is not supported."});
+    }
 
     const updated = await client.query(
       `UPDATE tenants SET
          name = $2,
          email = $3,
          phone = $4,
-         status = $5,
-         customer_type = $6,
          updated_at = NOW()
        WHERE id = $1
-       RETURNING ${SELECT_FIELDS}`,
+       RETURNING ${SELECT_FIELDS},xmin::text AS version`,
       [
         id,
         body.name !== undefined
@@ -342,12 +294,6 @@ router.patch("/:id", async (req, res) => {
         body.phone !== undefined
           ? (body.phone === null ? null : body.phone.trim())
           : oldTenant.phone,
-        body.status !== undefined
-          ? body.status
-          : oldTenant.status,
-        body.customer_type !== undefined
-          ? body.customer_type
-          : oldTenant.customer_type,
       ]
     );
 

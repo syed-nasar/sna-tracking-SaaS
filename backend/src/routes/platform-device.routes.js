@@ -160,6 +160,7 @@ router.get("/inventory", handle(async (req, res) => {
   const { q = "", lifecycle = "" } = req.query;
   if (typeof q !== "string" || q.length > 150 || q.includes("\0") ||
       (lifecycle !== "" && !lifecycles.includes(lifecycle))) fail(400, "Invalid search or lifecycle filter.");
+  const resellerId = req.query.resellerId ? identifier(req.query.resellerId, "reseller ID") : null;
   const offset = pagination(req.query.offset, 1000000);
   const limit = pagination(req.query.limit, 100, 25);
   if (!limit) fail(400, "Page size must be at least one.");
@@ -174,7 +175,8 @@ router.get("/inventory", handle(async (req, res) => {
       AND ($2 = '' OR strpos(lower(concat_ws(' ', d.unique_identifier, d.device_name, d.manufacturer,
         d.model, d.serial_number, d.device_type, d.traccar_device_id, t.name)), $2) > 0
         OR d.traccar_device_id = ANY($3::bigint[]))
-    ORDER BY d.id DESC LIMIT $4 OFFSET $5`, [lifecycle, search, liveIds, limit + 1, offset]);
+      AND ($6::bigint IS NULL OR d.reseller_id=$6)
+    ORDER BY d.id DESC LIMIT $4 OFFSET $5`, [lifecycle, search, liveIds, limit + 1, offset,resellerId]);
   res.json({
     data: rows.slice(0, limit).map((device) => withTelemetry(device, tracked?.get(device.traccarDeviceId))),
     pagination: { limit, offset, hasMore: rows.length > limit },

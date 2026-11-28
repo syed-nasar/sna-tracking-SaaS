@@ -6,6 +6,8 @@ const multer=require("multer");
 const { PNG }=require("pngjs");
 const rateLimit=require("express-rate-limit");
 const pool=require("../config/db");
+const { changeCustomerStatus }=require("../services/customer-lifecycle.service");
+const { page }=require("../services/platform-customers.service");
 const { requireAuth }=require("../middleware/auth.middleware");
 const { requirePlatformAuth }=require("../middleware/platform-auth.middleware");
 const { fail,parseId,transaction,changeAllocation,requireProvisioned,respondError }=require("../services/gps-inventory.service");
@@ -23,6 +25,7 @@ const limiter=rateLimit({windowMs:15*60*1000,limit:15,standardHeaders:"draft-7",
 const q=async(db,sql,params)=>(await db.query(sql,params)).rows;
 const fallback=bcrypt.hashSync(crypto.randomBytes(32).toString("hex"),12);
 const partner=req=>req.resellerAuth.resellerId;
+const paged=(items,limit,offset)=>({items:items.slice(0,limit),pagination:{limit,offset,hasMore:items.length>limit}});
 platform.use(requirePlatformAuth,clean);
 reseller.use(clean);
 tenant.use(requireAuth,clean);
@@ -53,6 +56,7 @@ async function addAdmin(db,r,input,actor) {
   return {admin:a,invitation};
 }
 platform.get("/",run(async(req,res)=>{
+  const [limit,offset]=page(req.query,50);
   const search=R.text(req.query.q,100)??"";
   const status=req.query.status??"";
   if(!["","active","suspended"].includes(status))fail(400,"Invalid reseller status.");
@@ -60,8 +64,8 @@ platform.get("/",run(async(req,res)=>{
     (SELECT count(*)::int FROM tenants t WHERE t.reseller_id=r.id) AS customers,
     (SELECT count(*)::int FROM gps_devices d WHERE d.reseller_id=r.id) AS devices
     FROM resellers r WHERE ($1='' OR strpos(lower(r.display_name),lower($1))>0 OR strpos(r.slug,lower($1))>0)
-    AND ($2='' OR r.status=$2) ORDER BY r.id DESC LIMIT 100`,[search,status]);
-  res.json({items});
+    AND ($2='' OR r.status=$2) ORDER BY r.id DESC LIMIT $3 OFFSET $4`,[search,status,limit+1,offset]);
+  res.json(paged(items,limit,offset));
 }));
 platform.post("/",run(async(req,res)=>{
   const b=req.body??{};
@@ -74,29 +78,41 @@ platform.post("/",run(async(req,res)=>{
   });
   res.status(201).json(result);
 }));
-async function details(rid,includeAdmins) {
+async function details(rid,includeAdmins,query) {
+  const [limit,auditOffset]=page({offset:query.auditOffset},25);
+  const [,adminOffset]=page({offset:query.adminOffset},25);
   const [r]=await q(pool,`SELECT ${R.fields} FROM resellers r WHERE r.id=$1`,[rid]);
   if(!r)fail(404,"Reseller not found.");
   const [counts]=await q(pool,`SELECT count(*)::int AS total,
     count(*) FILTER(WHERE customer_type='personal')::int AS personal,
     count(*) FILTER(WHERE customer_type='business')::int AS business,
     count(*) FILTER(WHERE status='active')::int AS active,
-    count(*) FILTER(WHERE status<>'active')::int AS inactive FROM tenants WHERE reseller_id=$1`,[rid]);
+    count(*) FILTER(WHERE status='suspended')::int AS suspended,
+    count(*) FILTER(WHERE status='inactive')::int AS inactive FROM tenants WHERE reseller_id=$1`,[rid]);
   const [inventory]=await q(pool,`SELECT count(*)::int AS total,count(*) FILTER(WHERE tenant_id IS NOT NULL)::int AS allocated,
     count(*) FILTER(WHERE lifecycle_status='installed')::int AS installed,
-    count(*) FILTER(WHERE lifecycle_status='available')::int AS available FROM gps_devices WHERE reseller_id=$1`,[rid]);
+    count(*) FILTER(WHERE lifecycle_status='available')::int AS available,
+    count(*) FILTER(WHERE lifecycle_status='available' AND provisioning_status='provisioned')::int AS ready_available,
+    count(*) FILTER(WHERE provisioning_status<>'provisioned')::int AS unverified FROM gps_devices WHERE reseller_id=$1`,[rid]);
   const domain=(await q(pool,"SELECT hostname,challenge,status,verified_at FROM reseller_domains WHERE reseller_id=$1",[rid]))[0]??null;
   const audit=await q(pool,`SELECT id,action,target_id,created_at,platform_admin_id,reseller_admin_id FROM reseller_audit
-    WHERE reseller_id=$1 ORDER BY id DESC LIMIT 50`,[rid]);
+    WHERE reseller_id=$1 ORDER BY id DESC LIMIT $2 OFFSET $3`,[rid,limit+1,auditOffset]);
   const admins=includeAdmins?await q(pool,`SELECT a.id,a.full_name,a.email,a.enabled,(a.password_hash IS NOT NULL) AS activated,
     i.expires_at,i.delivery_status FROM reseller_admins a LEFT JOIN LATERAL (
       SELECT ri.expires_at,coalesce(m.status,'manual') AS delivery_status FROM reseller_invitations ri
       LEFT JOIN reseller_invitation_email m ON m.invitation_id=ri.id WHERE ri.admin_id=a.id ORDER BY ri.id DESC LIMIT 1
-    ) i ON true WHERE a.reseller_id=$1 ORDER BY a.id LIMIT 100`,[rid]):undefined;
-  return {reseller:r,counts,inventory,domain,audit,admins,emailAvailability:configStatus(),brand:await R.publicBrand(pool,"id",rid)};
+    ) i ON true WHERE a.reseller_id=$1 ORDER BY a.id LIMIT $2 OFFSET $3`,[rid,limit+1,adminOffset]):undefined;
+  const adminCounts=includeAdmins?(await q(pool,`SELECT count(*)::int AS total,
+    count(*) FILTER(WHERE enabled)::int AS enabled,count(*) FILTER(WHERE NOT enabled)::int AS disabled,
+    count(*) FILTER(WHERE password_hash IS NOT NULL)::int AS activated
+    FROM reseller_admins WHERE reseller_id=$1`,[rid]))[0]:undefined;
+  return {reseller:r,counts,inventory,domain,audit:audit.slice(0,limit),admins:admins?.slice(0,limit),adminCounts,
+    auditPagination:paged(audit,limit,auditOffset).pagination,
+    adminPagination:admins?paged(admins,limit,adminOffset).pagination:undefined,
+    emailAvailability:configStatus(),brand:await R.publicBrand(pool,"id",rid)};
 }
-platform.get("/:id",run(async(req,res)=>res.json(await details(id(req.params.id),true))));
-reseller.get("/dashboard",run(async(req,res)=>res.json(await details(partner(req),false))));
+platform.get("/:id",run(async(req,res)=>res.json(await details(id(req.params.id),true,req.query))));
+reseller.get("/dashboard",run(async(req,res)=>res.json(await details(partner(req),false,req.query))));
 platform.patch("/:id",run(async(req,res)=>{
   const rid=id(req.params.id),b=req.body??{};
   const status=b.status;
@@ -147,37 +163,42 @@ platform.patch("/:id/admins/:adminId",run(async(req,res)=>{
 }));
 
 reseller.get("/customers",run(async(req,res)=>{
+  const [limit,offset]=page(req.query,50);
   const search=R.text(req.query.q,100)??"";
-  res.json({items:await q(pool,`SELECT id,name,slug,customer_type,status,created_at FROM tenants WHERE reseller_id=$1
-    AND ($2='' OR strpos(lower(name),lower($2))>0 OR strpos(slug,lower($2))>0) ORDER BY id DESC LIMIT 100`,[partner(req),search])});
+  const items=await q(pool,`SELECT id,name,slug,customer_type,status,created_at FROM tenants WHERE reseller_id=$1
+    AND ($2='' OR strpos(lower(name),lower($2))>0 OR strpos(slug,lower($2))>0) ORDER BY id DESC LIMIT $3 OFFSET $4`,[partner(req),search,limit+1,offset]);
+  res.json(paged(items,limit,offset));
 }));
 reseller.post("/customers",onboard);
 reseller.get("/customers/:tenantId/invitations/status",invitationStatus);
 reseller.post("/customers/:tenantId/invitations/reissue",reissue);
 reseller.get("/customers/:id",run(async(req,res)=>{
-  const [t]=await q(pool,`SELECT id,name,slug,status,customer_type,email,phone,created_at FROM tenants WHERE id=$1 AND reseller_id=$2`,
+  const [t]=await q(pool,`SELECT id,name,slug,status,customer_type,email,phone,created_at,xmin::text AS version FROM tenants WHERE id=$1 AND reseller_id=$2`,
   [id(req.params.id),partner(req)]);
   if(!t)fail(404,"Customer not found.");
-  res.json(t);
+  const recent_activity=await q(pool,`SELECT id,action,created_at FROM reseller_audit
+    WHERE reseller_id=$1 AND target_id=$2 AND action IN ('customer.onboarded','customer.active','customer.suspended')
+    ORDER BY created_at DESC,id DESC LIMIT 12`,[partner(req),t.id]);
+  res.json({...t,recent_activity});
 }));
 reseller.patch("/customers/:id/status",run(async(req,res)=>{
-  const status=req.body?.status,rid=partner(req),tid=id(req.params.id);
-  if(!["active","suspended"].includes(status))fail(400,"Invalid customer status.");
-  await R.manage(req,rid,async(db,actor)=>{
-    const result=await db.query("UPDATE tenants SET status=$3,updated_at=clock_timestamp() WHERE id=$1 AND reseller_id=$2",[tid,rid,status]);
-    if(!result.rowCount)fail(404,"Customer not found.");
-    await R.audit(db,rid,actor,`customer.${status}`,tid);
-  });
-  res.sendStatus(204);
+  const rid=partner(req),tid=id(req.params.id);
+  const result=await R.manage(req,rid,(db,actor)=>changeCustomerStatus(db,tid,rid,req.body,
+    (client,details)=>client.query(`INSERT INTO reseller_audit
+      (reseller_id,reseller_admin_id,action,target_id,lifecycle_details) VALUES ($1,$2,$3,$4,$5)`,
+      [rid,actor.resellerAdminId,`customer.${details.toStatus}`,tid,details])));
+  res.json(result);
 }));
 
 platform.get("/:id/inventory",run(async(req,res)=>{
+  const [limit,offset]=page(req.query,50);
   const rid=id(req.params.id),search=R.text(req.query.q,100)??"";
-  res.json({items:await q(pool,`SELECT id,device_name,unique_identifier,lifecycle_status,reseller_id,tenant_id,
+  const items=await q(pool,`SELECT id,device_name,unique_identifier,lifecycle_status,reseller_id,tenant_id,
       (provisioning_status='provisioned' AND traccar_device_id IS NOT NULL) AS allocation_ready FROM gps_devices
     WHERE (reseller_id=$1 OR (reseller_id IS NULL AND tenant_id IS NULL AND lifecycle_status='available'))
     AND ($2='' OR strpos(lower(coalesce(device_name,'')),lower($2))>0 OR strpos(lower(coalesce(unique_identifier,'')),lower($2))>0)
-    ORDER BY (reseller_id=$1) DESC NULLS LAST,id DESC LIMIT 100`,[rid,search])});
+    ORDER BY (reseller_id=$1) DESC NULLS LAST,id DESC LIMIT $3 OFFSET $4`,[rid,search,limit+1,offset]);
+  res.json(paged(items,limit,offset));
 }));
 platform.put("/:id/inventory/:deviceId",run(async(req,res)=>{
   const rid=id(req.params.id),did=id(req.params.deviceId),assign=req.body?.assign;
@@ -198,18 +219,21 @@ platform.put("/:id/inventory/:deviceId",run(async(req,res)=>{
   res.sendStatus(204);
 }));
 reseller.get("/inventory",run(async(req,res)=>{
-  res.json({items:await q(pool,`SELECT d.id,d.device_name,d.unique_identifier,d.lifecycle_status,d.tenant_id,t.name AS customer,
+  const [limit,offset]=page(req.query,50);
+  const items=await q(pool,`SELECT d.id,d.device_name,d.unique_identifier,d.lifecycle_status,d.tenant_id,t.name AS customer,
     (d.provisioning_status='provisioned' AND d.traccar_device_id IS NOT NULL) AS allocation_ready
     FROM gps_devices d LEFT JOIN tenants t ON t.id=d.tenant_id AND t.reseller_id=d.reseller_id
-    WHERE d.reseller_id=$1 ORDER BY d.id DESC LIMIT 100`,[partner(req)])});
+    WHERE d.reseller_id=$1 ORDER BY d.id DESC LIMIT $2 OFFSET $3`,[partner(req),limit+1,offset]);
+  res.json(paged(items,limit,offset));
 }));
 reseller.get("/inventory/:id/history",run(async(req,res)=>{
-  const items=await q(pool,`SELECT e.action,e.created_at FROM gps_device_events e JOIN gps_devices d ON d.id=e.device_id
+  const [limit,offset]=page(req.query,25);
+  const items=await q(pool,`SELECT e.id,e.action,e.created_at FROM gps_device_events e JOIN gps_devices d ON d.id=e.device_id
     WHERE d.id=$1 AND d.reseller_id=$2 AND (e.details->>'toTenantId' IN (SELECT id::text FROM tenants WHERE reseller_id=$2)
       OR e.details->>'fromTenantId' IN (SELECT id::text FROM tenants WHERE reseller_id=$2)
       OR e.details->>'tenantId' IN (SELECT id::text FROM tenants WHERE reseller_id=$2))
-      ORDER BY e.id DESC LIMIT 50`,[id(req.params.id),partner(req)]);
-  res.json({items});
+      ORDER BY e.id DESC LIMIT $3 OFFSET $4`,[id(req.params.id),partner(req),limit+1,offset]);
+  res.json(paged(items,limit,offset));
 }));
 reseller.post("/inventory/:id/allocation",run(async(req,res)=>{
   const rid=partner(req),did=id(req.params.id),tid=id(req.body?.tenantId);

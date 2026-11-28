@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { platformApi } from "../../services/api";
 import { PageHeader } from "../../components/WorkspaceUi";
 
@@ -374,10 +374,13 @@ function DeviceDetails({ id, onClose, onChanged }) {
 }
 
 export default function DeviceInventoryPage() {
-  const [query, setQuery] = useState({ q: "", lifecycle: "", offset: 0 });
+  const [params] = useSearchParams();
+  const resellerId=params.get("resellerId")??"";
+  const initialLifecycle=params.get("lifecycle")??"";
+  const [query, setQuery] = useState({ q: "", lifecycle:initialLifecycle, resellerId, offset: 0 });
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState(null);
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(params.get("deviceId"));
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -426,10 +429,10 @@ export default function DeviceInventoryPage() {
               event.preventDefault();
               setError("");
               setResult(null);
-              setQuery({ ...Object.fromEntries(new FormData(event.currentTarget)), offset: 0 });
+              setQuery({ ...Object.fromEntries(new FormData(event.currentTarget)), resellerId, offset: 0 });
             }}>
               <input aria-label="Search devices" className={input} name="q" maxLength={150} placeholder="Search inventory" />
-              <select aria-label="Filter lifecycle" className={input} name="lifecycle">
+              <select aria-label="Filter lifecycle" className={input} name="lifecycle" defaultValue={initialLifecycle}>
                 <option value="">All lifecycles</option>
                 {statuses.map((status) => <option key={status}>{status}</option>)}
               </select>

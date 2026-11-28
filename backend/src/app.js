@@ -9,6 +9,7 @@ const authRoutes = require("./routes/auth.routes");
 const platformAuthRoutes = require("./routes/platform-auth.routes");
 const platformTenantRoutes = require("./routes/platform-tenant.routes");
 const platformDeviceRoutes = require("./routes/platform-device.routes");
+const platformOperationsRoutes = require("./routes/platform-operations.routes");
 
 const vehicleRoutes = require("./routes/vehicle.routes");
 const vehicleReports = require("./routes/vehicle-reports.routes");
@@ -60,6 +61,7 @@ app.use("/api/platform/auth", platformAuthRoutes);
 app.use("/api/platform/tenants", platformTenantRoutes);
 
 app.use("/api/platform/devices", platformDeviceRoutes);
+app.use("/api/platform/ops", platformOperationsRoutes);
 app.use("/api/platform/connectivity", connectivityRoutes.platform);
 app.use("/api/platform/billing", billingRoutes.platform);
 

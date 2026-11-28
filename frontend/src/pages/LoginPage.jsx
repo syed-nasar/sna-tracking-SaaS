@@ -14,23 +14,31 @@ import {
 import { useAuth } from "../context/AuthContext";
 import ThemeSelector from "../components/ThemeSelector";
 import BrandMark from "../components/BrandMark";
-import { useBrand } from "../context/brand";
+import { useBrand, useBrandReady } from "../context/brand";
 
 export default function LoginPage({ type = "tenant" }) {
-  const { state } = useLocation();
   const {brandSlug}=useParams();
+  return <LoginForm key={brandSlug} type={type} brandSlug={brandSlug} />;
+}
+
+function LoginForm({ type,brandSlug }) {
+  const { state } = useLocation();
   if (type === "tenant" && brandSlug && state?.signInType === "reseller") type = "reseller";
   const isPlatform = type === "platform";
   const isReseller=type==="reseller";
   const brand=useBrand();
-  const resellerSlug=brandSlug??brand?.slug;
+  const brandReady=useBrandReady();
+  const slug=brandSlug??brand?.slug;
+  const resellerSlug=/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug??"")?slug:undefined;
+  const fleetLogin=resellerSlug?`/r/${resellerSlug}/login`:"/login";
+  const resellerLogin=resellerSlug?`/r/${resellerSlug}/reseller/login`:"/reseller/login";
 
   const { session, signInTenant, signInPlatform,signInReseller } = useAuth();
 
   const [customerType, setCustomerType] = useState(() => state?.customerType === "business" ? "business" : "personal");
 
   const [form, setForm] = useState({
-    tenantSlug: isReseller ? brandSlug ?? "" : "",
+    tenantSlug: "",
     email: "",
     password: "",
   });
@@ -88,7 +96,7 @@ export default function LoginPage({ type = "tenant" }) {
           password,
         });
       } else if (isReseller) {
-        await signInReseller({slug:form.tenantSlug.trim().toLowerCase(),email,password});
+        await signInReseller({slug:resellerSlug??form.tenantSlug.trim().toLowerCase(),email,password});
       } else if (customerType === "business") {
         await signInTenant({
           tenantSlug: form.tenantSlug.trim().toLowerCase(),
@@ -232,7 +240,8 @@ export default function LoginPage({ type = "tenant" }) {
                     required
                     maxLength={100}
                     autoComplete="organization"
-                    value={form.tenantSlug}
+                    value={isReseller?(resellerSlug??form.tenantSlug):form.tenantSlug}
+                    readOnly={isReseller&&Boolean(resellerSlug)}
                     onChange={updateField}
                     placeholder="your-company"
                     disabled={loading}
@@ -339,15 +348,16 @@ export default function LoginPage({ type = "tenant" }) {
           </form>
 
           <div className="mt-7 flex flex-wrap justify-center gap-3 border-t border-line pt-6 text-center">
-            <Link
-              to={isPlatform || isReseller ? "/login" : "/platform/login"}
-              className="text-sm text-muted transition hover:text-accent"
-            >
-              {isPlatform || isReseller
-                ? "Switch to Fleet Login"
-                : "Platform Administrator Login"}
-            </Link>
-            {!isPlatform&&!isReseller&&<Link to="/reseller/login" className="text-sm text-muted hover:text-accent">
+            {(isPlatform || isReseller) ? (
+              <Link to={isReseller ? fleetLogin : "/login"} className="text-sm text-muted transition hover:text-accent">
+                Switch to Fleet Login
+              </Link>
+            ) : brandReady && !brand && (
+              <Link to="/platform/login" className="text-sm text-muted transition hover:text-accent">
+                Platform Administrator Login
+              </Link>
+            )}
+            {!isPlatform&&!isReseller&&<Link to={resellerLogin} className="text-sm text-muted hover:text-accent">
               Reseller Administrator Login
             </Link>}
           </div>

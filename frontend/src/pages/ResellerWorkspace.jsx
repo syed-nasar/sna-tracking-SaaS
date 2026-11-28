@@ -7,6 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import { brandAsset } from "../context/brand";
 import { platformApi,resellerApi } from "../services/api";
 import CompanyOnboarding from "./platform/CompanyOnboarding";
+import { Paging } from "./platform/PlatformOperationsUi";
 
 const panel="min-w-0 rounded-panel border border-line bg-panel p-4";
 const field="control w-full min-w-0";
@@ -32,11 +33,11 @@ function useResource(client,url,version){
     if(!url)return;
     const controller=new AbortController();
     client.get(url,{signal:controller.signal}).then(({data})=>{
-      if(!controller.signal.aborted)setResult({url,data});
-    }).catch(error=>{if(!controller.signal.aborted)setResult({url,error:errorText(error)});});
+      if(!controller.signal.aborted)setResult({url,version,data});
+    }).catch(error=>{if(!controller.signal.aborted)setResult({url,version,error:errorText(error)});});
     return ()=>controller.abort();
   },[client,url,version]);
-  return result?.url===url?result:null;
+  return result?.url===url&&result.version===version?result:null;
 }
 function Form({title,fields,initial={},submit,label="Save",children,disabled}){
   return <form className={`${panel} grid gap-3`} onSubmit={e=>{e.preventDefault();submit(Object.fromEntries(new FormData(e.currentTarget)));}}>
@@ -76,13 +77,14 @@ function Metrics({data}){
     {Object.entries(data.inventory).map(([key,value])=><MetricCard key={key} title={`${key} GPS devices`} value={value} />)}
   </section>;
 }
-function Audit({rows}){
-  return <section className={panel}><h2 className="font-semibold">Recent activity</h2>
+function Audit({rows,embedded=false}){
+  const content=<>
     {!rows.length&&<p className="text-muted">No activity recorded.</p>}
     <ul className="divide-y divide-line">{rows.map(row=><li key={row.id} className="flex flex-wrap gap-2 py-2 text-sm">
       <span className="grow">{row.action.replaceAll(/[._]/g," ")}</span><time dateTime={row.created_at}>{date(row.created_at)}</time>
     </li>)}</ul>
-  </section>;
+  </>;
+  return embedded?content:<section className={panel}><h2 className="font-semibold">Recent activity</h2>{content}</section>;
 }
 function Settings({data,client,base,operate,busy,platform}){
   const [preview,setPreview]=useState(null);
@@ -146,20 +148,31 @@ export default function ResellerWorkspace({platform=false,onboard=false}){
   const settings=!platform&&pathname==="/reseller/settings";
   const [search,setSearch]=useState("");
   const [query,setQuery]=useState("");
-  const [filter,setFilter]=useState("");
+  const [filter,setFilter]=useState(()=>new URLSearchParams(window.location.search).get("status")??"");
+  const [offset,setOffset]=useState(0);
+  const [stockOffset,setStockOffset]=useState(0);
+  const [auditOffset,setAuditOffset]=useState(0);
+  const [adminOffset,setAdminOffset]=useState(0);
   const [version,setVersion]=useState(0);
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState("");
   const [error,setError]=useState("");
   const [manual,setManual]=useState(null);
+  const [historyDevice,setHistoryDevice]=useState(null);
   const [history,setHistory]=useState(null);
   const detailUrl=list||customers||customer||inventory||onboard?null:platform?base:base+"/dashboard";
-  const resourceUrl=list?`${base}?q=${encodeURIComponent(query)}&status=${filter}`:
-    customers?`${base}/customers?q=${encodeURIComponent(query)}`:
-    customer?`${base}/customers/${id}`:inventory?`${base}/inventory`:detailUrl;
+  const resourceUrl=list?`${base}?q=${encodeURIComponent(query)}&status=${filter}&offset=${offset}`:
+    customers?`${base}/customers?q=${encodeURIComponent(query)}&offset=${offset}`:
+    customer?`${base}/customers/${id}`:inventory?`${base}/inventory?offset=${offset}`:
+      detailUrl?`${detailUrl}?adminOffset=${adminOffset}&auditOffset=${auditOffset}`:null;
   const main=useResource(client,resourceUrl,version);
-  const inv=useResource(client,platform&&id?base+"/inventory":inventory?base+"/customers":null,version);
+  const inv=useResource(client,platform&&id?`${base}/inventory?offset=${stockOffset}`:inventory?`${base}/customers?offset=${stockOffset}`:null,version);
   const customerInvite=useResource(client,customer?`${base}/customers/${id}/invitations/status`:null,version);
+  const loadHistory=async(deviceId,offset=0)=>{
+    const {data}=await client.get(`${base}/inventory/${deviceId}/history`,{params:{offset}});
+    setHistory(data);
+    setHistoryDevice(deviceId);
+  };
   const operate=async(work,confirm)=>{
     if(busy||(confirm&&!window.confirm(confirm)))return;
     setBusy(true);setError("");setNotice("");
@@ -179,9 +192,9 @@ export default function ResellerWorkspace({platform=false,onboard=false}){
       disabled={busy} label="Create reseller" submit={({admin_name,admin_email,...org})=>operate(async()=>
         (await client.post(base,{...org,administrator:{full_name:admin_name,email:admin_email}})).data)} />}
     {(list||customers)&&<section className={panel}>
-      <form className="flex flex-wrap items-end gap-2" onSubmit={e=>{e.preventDefault();setQuery(search);}}>
+      <form className="flex flex-wrap items-end gap-2" onSubmit={e=>{e.preventDefault();setQuery(search);setOffset(0);}}>
         <label className="grid grow gap-1 text-sm">Search<input className={field} value={search} onChange={e=>setSearch(e.target.value)} /></label>
-        {list&&<label className="grid gap-1 text-sm">Status<select className={button} value={filter} onChange={e=>setFilter(e.target.value)}>
+        {list&&<label className="grid gap-1 text-sm">Status<select className={button} value={filter} onChange={e=>{setFilter(e.target.value);setOffset(0);}}>
           <option value="">All</option><option value="active">Active</option><option value="suspended">Suspended</option></select></label>}
         <button className={button}>Search</button>
       </form>
@@ -190,6 +203,7 @@ export default function ResellerWorkspace({platform=false,onboard=false}){
         <Link className="grow font-medium text-accent" to={`${list?base:base+"/customers"}/${row.id}`}>{row.display_name??row.name}</Link>
         <span>{row.customer_type??`${row.customers} customers · ${row.devices} devices`}</span><span>{row.status}</span>
       </li>)}</ul>
+      {main?.data?.pagination&&<Paging pagination={main.data.pagination} change={setOffset}/>}
     </section>}
     {customer&&data&&<section className={panel}>
       <h2 className="text-lg font-semibold">{data.name}</h2>
@@ -198,14 +212,29 @@ export default function ResellerWorkspace({platform=false,onboard=false}){
       <p className="mt-2 text-sm">Administrator invitation {customerInvite?.data?.invitation?.state??"unavailable"}
         {" · "}{statusLabel(customerInvite?.data?.invitation?.deliveryStatus)}</p>
       <p className="text-sm text-muted">Expires {date(customerInvite?.data?.invitation?.expiresAt)}</p>
+      <h3 className="font-semibold">Recent administrative activity</h3>
+      {data.recent_activity?.length?<Audit rows={data.recent_activity} embedded />:<p className="text-sm text-muted">No activity recorded.</p>}
       <button className={button} type="button" disabled={busy||!customerInvite?.data?.invitation?.canResend}
         onClick={()=>operate(async()=>(await client.post(`${base}/customers/${id}/invitations/reissue`,{})).data,"Resend the initial administrator invitation?")}>Resend invitation</button>
       <button className={`${button} ms-2`} type="button" disabled={busy}
-        onClick={()=>operate(()=>client.patch(`${base}/customers/${id}/status`,{status:data.status==="active"?"suspended":"active"}),"Change customer access status?")}>
+        onClick={()=>{
+          if(!window.confirm(`Change access for ${data.name}? Existing sessions will be invalidated.`))return;
+          const reason=window.prompt("Administrative reason (required, up to 500 characters)");
+          if(reason===null)return;
+          if(!reason.trim()||reason.trim().length>500){setError("Enter an administrative reason.");return;}
+          void operate(()=>client.patch(`${base}/customers/${id}/status`,{
+            status:data.status==="active"?"suspended":"active",version:data.version,reason:reason.trim(),
+          }));
+        }}>
         {data.status==="active"?"Suspend customer":"Reactivate customer"}</button>
     </section>}
     {detailUrl&&data&&<>
       <Metrics data={data} />
+      {platform&&<div className="flex flex-wrap gap-3">
+        <Link className={button} to={`/platform/customers?ownership=reseller&resellerId=${id}`}>View customers</Link>
+        <Link className={button} to={`/platform/devices?resellerId=${id}`}>View GPS stock</Link>
+      </div>}
+      <p className="text-sm">Customers suspended: {data.counts.suspended}. GPS stock ready and available: {data.inventory.ready_available}. Unverified GPS stock: {data.inventory.unverified}.</p>
       {platform&&<Form key={data.reseller.updated_at} title="Organization" fields={orgFields.filter(([key])=>key!=="display_name")}
         initial={data.reseller} disabled={busy} submit={body=>operate(()=>client.patch(base,{...body,status:data.reseller.status}))}>
         <p className="text-sm">{data.reseller.status} · {data.reseller.slug}</p>
@@ -215,14 +244,15 @@ export default function ResellerWorkspace({platform=false,onboard=false}){
       </Form>}
       {platform&&<><Form title="Invite administrator" fields={adminFields} label="Create invitation" disabled={busy}
         submit={body=>operate(async()=>(await client.post(base+"/admins",body)).data)} />
-        <section className={panel}><h2 className="font-semibold">Administrators</h2><ul className="divide-y divide-line">
+        <section className={panel}><h2 className="font-semibold">Administrators</h2>
+          {data.adminCounts&&<p>{data.adminCounts.enabled} enabled, {data.adminCounts.disabled} disabled, {data.adminCounts.activated} activated</p>}<ul className="divide-y divide-line">
           {data.emailAvailability!=="ready"&&<li className="py-2 text-sm text-muted">Email {statusLabel(data.emailAvailability)}</li>}
           {data.admins.map(a=><li key={a.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
             <span className="min-w-0 grow break-words">{a.full_name} · {a.email} · {a.activated?"Activated":statusLabel(a.delivery_status)}</span>
             {!a.activated&&<button type="button" className={button} disabled={busy||!a.enabled} onClick={()=>operate(async()=>
               (await client.post(`${base}/admins/${a.id}/invitation`,{})).data,"Resend this invitation?")}>Resend</button>}
             <button type="button" className={button} disabled={busy} onClick={()=>operate(()=>client.patch(`${base}/admins/${a.id}`,{enabled:!a.enabled}),"Change administrator access?")}>{a.enabled?"Disable":"Enable"}</button>
-          </li>)}</ul></section>
+          </li>)}</ul>{data.adminPagination&&<Paging pagination={data.adminPagination} change={setAdminOffset}/>}</section>
         <section className={panel}><h2 className="font-semibold">Inventory assignment</h2>
           {inv?.error&&<StateNotice error>{inv.error}</StateNotice>}
           <ul className="divide-y divide-line">{inv?.data?.items.map(d=><li key={d.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
@@ -230,16 +260,18 @@ export default function ResellerWorkspace({platform=false,onboard=false}){
             {d.lifecycle_status==="available"&&<button className={button} type="button" disabled={busy || (!d.reseller_id && !d.allocation_ready)} onClick={()=>operate(()=>
               client.put(`${base}/inventory/${d.id}`,{assign:d.reseller_id==null}),"Change reseller inventory assignment?")}>{d.reseller_id?"Return to platform":"Assign to reseller"}</button>}
           </li>)}</ul>
+          {inv?.data?.pagination&&<Paging pagination={inv.data.pagination} change={setStockOffset}/>}
         </section>
       </>}
       {(platform||settings)&&<Settings data={data} client={client} base={base} operate={operate} busy={busy} platform={platform} />}
       <Audit rows={data.audit} />
+      {data.auditPagination&&<Paging pagination={data.auditPagination} change={setAuditOffset}/>}
     </>}
     {inventory&&main?.data&&<section className={panel}>
       {!listed.length&&<p className="text-muted">No assigned devices.</p>}
       <ul className="divide-y divide-line">{listed.map(d=><li key={d.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
         <span className="grow">{d.device_name||d.unique_identifier||`Device ${d.id}`} · {d.lifecycle_status}{d.customer?` · ${d.customer}`:""}</span>
-        <button className={button} type="button" onClick={()=>operate(async()=>{setHistory((await client.get(`${base}/inventory/${d.id}/history`)).data.items);})}>History</button>
+        <button className={button} type="button" onClick={()=>operate(()=>loadHistory(d.id))}>History</button>
         {!d.allocation_ready&&d.lifecycle_status==="available"&&<span className="text-muted">Platform provisioning required</span>}
         {d.lifecycle_status==="available"&&d.allocation_ready&&<form className="flex flex-wrap gap-2" onSubmit={e=>{
           e.preventDefault();const tenantId=new FormData(e.currentTarget).get("tenantId");
@@ -250,8 +282,12 @@ export default function ResellerWorkspace({platform=false,onboard=false}){
           <button className={button} disabled={busy}>Allocate</button>
         </form>}
       </li>)}</ul>
+      {main?.data?.pagination&&<Paging pagination={main.data.pagination} change={setOffset}/>}
+      {inv?.data?.pagination&&<div><p className="text-sm">Allocation customer options</p><Paging pagination={inv.data.pagination} change={setStockOffset}/></div>}
       {history&&<section className="mt-4"><h2 className="font-semibold">Selected device history</h2>
-        {!history.length?<p className="text-muted">No customer allocation history.</p>:<ul>{history.map((row,i)=><li key={i}>{row.action} · {date(row.created_at)}</li>)}</ul>}
+        {!history.items.length?<p className="text-muted">No customer allocation history.</p>:<ul>{history.items.map((row,i)=><li key={row.id??i}>{row.action} · {date(row.created_at)}</li>)}</ul>}
+        {history.pagination&&<Paging pagination={history.pagination}
+          change={offset=>operate(()=>loadHistory(historyDevice,offset))}/>}
       </section>}
     </section>}
   </main>;

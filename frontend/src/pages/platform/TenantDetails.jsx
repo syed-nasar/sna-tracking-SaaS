@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import InvitationDelivery from "./InvitationDelivery";
 import useInvitationStatus from "./useInvitationStatus";
@@ -48,8 +48,12 @@ function CustomerTypeBadge({ type }) {
 
 export default function TenantDetails() {
   const { id } = useParams();
+  return <CustomerDetails key={id} id={id} />;
+}
 
+function CustomerDetails({ id }) {
   const [tenant, setTenant] = useState(null);
+  const lifecycleRequest = useRef(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -118,6 +122,7 @@ export default function TenantDetails() {
 
     return () => {
       cancelled = true;
+      lifecycleRequest.current?.abort();
     };
   }, [id]);
 
@@ -138,28 +143,6 @@ export default function TenantDetails() {
       return;
     }
 
-    if (
-      !["personal", "business"].includes(form.customer_type)
-    ) {
-      setError("Select a valid customer type.");
-      return;
-    }
-
-    const typeChanged =
-      form.customer_type !== tenant.customer_type;
-
-    if (typeChanged) {
-      const confirmed = window.confirm(
-        `Change customer type from ${
-          tenant.customer_type
-        } to ${form.customer_type}?\n\n` +
-          "The existing tenant ID, slug, administrator, " +
-          "and vehicle records will remain unchanged."
-      );
-
-      if (!confirmed) return;
-    }
-
     setSaving(true);
     setError("");
     setSuccess("");
@@ -171,13 +154,12 @@ export default function TenantDetails() {
           name: form.name.trim(),
           email: form.email.trim() || null,
           phone: form.phone.trim() || null,
-          customer_type: form.customer_type,
         }
       );
 
       const updatedTenant = response.data;
 
-      setTenant(updatedTenant);
+      setTenant(current=>({...current,...updatedTenant}));
 
       setForm({
         name: updatedTenant.name || "",
@@ -201,6 +183,7 @@ export default function TenantDetails() {
   };
 
   const handleStatusChange = async () => {
+    if (tenant?.id !== id || saving || updatingStatus || reissuing) return;
     const nextStatus =
       tenant.status === "active"
         ? "suspended"
@@ -213,33 +196,46 @@ export default function TenantDetails() {
     );
 
     if (!confirmed) return;
+    const reason = window.prompt("Administrative reason (required, up to 500 characters)");
+    if (reason===null) return;
+    if (!reason.trim() || reason.trim().length>500) { setError("Enter an administrative reason."); return; }
 
     setUpdatingStatus(true);
     setError("");
     setSuccess("");
+    lifecycleRequest.current?.abort();
+    const controller = new AbortController();
+    lifecycleRequest.current = controller;
 
     try {
       const response = await platformApi.patch(
-        `/platform/tenants/${id}`,
-        {
-          status: nextStatus,
-        }
+        `/platform/tenants/${id}/status`,
+        { status: nextStatus, version: tenant.version, reason:reason.trim() },
+        { signal: controller.signal }
       );
 
-      setTenant(response.data);
+      if (controller.signal.aborted) return;
+      setTenant(current=>({...current,...response.data}));
 
       setSuccess(
         nextStatus === "active"
           ? "Customer activated successfully."
           : "Customer suspended successfully."
       );
+      try {
+        const {data} = await platformApi.get(`/platform/tenants/${id}`, { signal: controller.signal });
+        if (!controller.signal.aborted) setTenant(data);
+      } catch {
+        if (!controller.signal.aborted) setError("Customer status changed, but details could not refresh. Reload the page to see the latest activity.");
+      }
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(
         err.response?.data?.message ||
           "Unable to change customer status"
       );
     } finally {
-      setUpdatingStatus(false);
+      if (!controller.signal.aborted) setUpdatingStatus(false);
     }
   };
 
@@ -314,11 +310,11 @@ export default function TenantDetails() {
     <main className="min-h-[calc(100dvh-4rem)] bg-canvas px-5 py-10 text-ink sm:px-8">
       <div className="mx-auto max-w-5xl">
         <Link
-          to="/platform/dashboard"
+          to="/platform/customers"
           className="mb-8 inline-flex items-center gap-2 text-sm text-muted transition hover:text-ink"
         >
           <ArrowLeft size={17} />
-          Back to Dashboard
+          Back to Customers
         </Link>
 
         {error && (
@@ -391,6 +387,28 @@ export default function TenantDetails() {
               </span>
             </div>
 
+            <section className="mb-6 space-y-3 rounded-panel border border-line bg-panel p-4">
+              <h2 className="font-semibold">Account operations</h2>
+              <p>Ownership {tenant.reseller_id?<Link className="text-accent" to={`/platform/resellers/${tenant.reseller_id}`}>{tenant.reseller_name}</Link>:"Direct SNA"}</p>
+              <p>Vehicles {tenant.vehicle_count} ({tenant.active_vehicle_count} active)</p>
+              <p>Trackers {tenant.allocated_gps_count} allocated, {tenant.installed_gps_count} installed</p>
+              <p>Subscription {tenant.subscription_status??"No subscription"}{" "}
+                <Link className="text-accent" to={`/platform/billing?tab=subscriptions&tenantId=${tenant.id}`}>Manage subscription</Link>
+                {" "}<Link className="text-accent" to={`/platform/billing?tab=invoices&tenantId=${tenant.id}`}>Customer invoices</Link>
+              </p>
+              <h3 className="font-semibold">Tenant administrators</h3>
+              {tenant.administrators?.length?<ul className="space-y-1">
+                {tenant.administrators.map(admin=><li key={admin.id} className="break-words text-sm">
+                  {admin.full_name} ({admin.email}){" \u00B7 "}{admin.is_active?"Active":"Inactive"}
+                  {admin.used_at?` \u00B7 invitation accepted ${formatDate(admin.used_at)}`:
+                    admin.expires_at?` \u00B7 invitation expires ${formatDate(admin.expires_at)}`:""}
+                </li>)}</ul>:<p>No tenant administrators listed.</p>}
+              <h3 className="font-semibold">Recent administrative activity</h3>
+              {tenant.recent_activity?.length?<ul className="text-sm">
+                {tenant.recent_activity.map(event=><li key={event.id}>{formatDate(event.created_at)}{" \u00B7 "}{event.action}</li>)}
+              </ul>:<p>No activity recorded.</p>}
+              <Link className="text-accent" to={`/platform/audit?tenantId=${tenant.id}`}>Customer audit events</Link>
+            </section>
             <div className="grid gap-6 lg:grid-cols-3">
               <section className="rounded-panel border border-line bg-panel p-7 lg:col-span-2">
                 <h2 className="mb-6 text-lg font-bold">
@@ -401,36 +419,6 @@ export default function TenantDetails() {
                   onSubmit={handleSave}
                   className="space-y-5"
                 >
-                  <div>
-                    <label
-                      htmlFor="customer-type"
-                      className="mb-2 block text-sm text-secondary"
-                    >
-                      Customer Type
-                    </label>
-
-                    <select
-                      id="customer-type"
-                      name="customer_type"
-                      value={form.customer_type}
-                      onChange={handleChange}
-                      className={inputClass}
-                    >
-                      <option value="business">
-                        Business
-                      </option>
-
-                      <option value="personal">
-                        Personal
-                      </option>
-                    </select>
-
-                    <p className="mt-2 text-xs text-subtle">
-                      Changing the customer type does not
-                      change the tenant ID or slug.
-                    </p>
-                  </div>
-
                   <div>
                     <label
                       htmlFor="customer-name"

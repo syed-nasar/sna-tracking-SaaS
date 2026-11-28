@@ -62,6 +62,24 @@ async function createDevice({ name, uniqueId }) {
 module.exports = {
   getDevices,
   getPositions,
+  async healthProbe() {
+    if (!process.env.TRACCAR_BASE_URL) return {status:"not_configured",reachable:false,authenticated:false};
+    const options={...provisioningOptions,timeout:1150,maxContentLength:1024*1024};
+    const start=Date.now();
+    await traccarApi.get("/api/server",{...options,auth:null,signal:AbortSignal.timeout(1200)});
+    const connectivityMs=Date.now()-start;
+    if (!process.env.TRACCAR_EMAIL || !process.env.TRACCAR_PASSWORD) {
+      return {status:"not_configured",reachable:true,authenticated:false,connectivityMs};
+    }
+    try {
+      const {data}=await traccarApi.get("/api/devices",{...options,params:{limit:1},
+        signal:AbortSignal.timeout(1200)});
+      if (!Array.isArray(data)) return {status:"degraded",reachable:true,authenticated:false,connectivityMs};
+      return {reachable:true,authenticated:true,connectivityMs};
+    } catch {
+      return {status:"degraded",reachable:true,authenticated:false,connectivityMs};
+    }
+  },
   async getReport(kind, params, signal) {
     const response = await traccarApi.get(`/api/reports/${kind}`, {
       params, signal, maxContentLength: 16 * 1024 * 1024,
